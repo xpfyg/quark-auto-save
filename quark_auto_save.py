@@ -17,18 +17,21 @@ import requests
 from datetime import datetime
 
 # 兼容青龙
-try:
-    from treelib import Tree
-except:
-    print("正在尝试自动安装依赖...")
-    os.system("pip3 install treelib &> /dev/null")
-    from treelib import Tree
+# from openpyxl import load_workbook
 
+# try:
+#     from treelib import Tree
+# except:
+#     print("正在尝试自动安装依赖...")
+#     os.system("pip3 install treelib &> /dev/null")
+#     from treelib import Tree
+from flask import jsonify
+
+from db import db_session
 
 CONFIG_DATA = {}
 NOTIFYS = []
 GH_PROXY = os.environ.get("GH_PROXY", "https://ghproxy.net/")
-
 
 MAGIC_REGEX = {
     "$TV": {
@@ -253,6 +256,7 @@ class Quark:
                 break
             if len(file_paths) == 0:
                 break
+        # print(fids)
         return fids
 
     def ls_dir(self, pdir_fid):
@@ -283,6 +287,54 @@ class Quark:
             if len(file_list) >= response["metadata"]["_total"]:
                 break
         return file_list
+
+    def ls_share(self):
+        file_list = []
+        page = 1
+        while True:
+            url = "https://drive-pc.quark.cn/1/clouddrive/share/mypage/detail"
+            querystring = {
+                "pr": "ucpro",
+                "fr": "pc",
+                "uc_param_str": "",
+                "_page": page,
+                "_size": 50,
+                "_order_field": "created_at",
+                "_fetch_total": "1",
+                "_fetch_notify_follow": "1",
+            }
+            headers = self.common_headers()
+            response = requests.request(
+                "GET", url, headers=headers, params=querystring
+            ).json()
+            if response["data"]["list"]:
+                file_list += response["data"]["list"]
+                page += 1
+            else:
+                break
+            if len(file_list) >= response["metadata"]["_total"]:
+                break
+        return file_list
+
+    def ls_share_page(self, page=1, size=10):
+       url = "https://drive-pc.quark.cn/1/clouddrive/share/mypage/detail"
+       querystring = {
+           "pr": "ucpro",
+           "fr": "pc",
+           "uc_param_str": "",
+           "_page": page,
+           "_size": size,
+           "_order_field": "created_at",
+           "_fetch_total": "1",
+           "_fetch_notify_follow": "1",
+       }
+       headers = self.common_headers()
+       response = requests.request(
+           "GET", url, headers=headers, params=querystring
+       ).json()
+       if response["data"]["list"]:
+           file_list = response["data"]["list"]
+       return file_list
 
     def save_file(self, fid_list, fid_token_list, to_pdir_fid, pwd_id, stoken):
         url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/save"
@@ -360,6 +412,26 @@ class Quark:
         ).json()
         return response["data"]["list"]
 
+    def share_dir(self, fid_list, title):
+        url = "https://drive-pc.quark.cn/1/clouddrive/share"
+        querystring = {"uc_param_str": "", "fr": "pc", "pr": "ucpro"}
+        payload = {
+            "fid_list": fid_list,
+            "title": title,
+            "url_type": 1,
+            "expired_type": 1
+        }
+        headers = self.common_headers()
+        response = requests.request(
+            "POST", url, json=payload, headers=headers, params=querystring
+        ).json()
+        print(response)
+        time.sleep(1)
+        share_task = self.query_task(response['data']['task_id'])
+        print(share_task)
+        share = self.share_password(share_task['data']['share_id'])
+        return share
+
     def recycle_remove(self, record_list):
         url = "https://drive-m.quark.cn/1/clouddrive/file/recycle/remove"
         querystring = {"uc_param_str": "", "fr": "pc", "pr": "ucpro"}
@@ -378,10 +450,10 @@ class Quark:
             re.sub(r"/{2,}", "/", f"/{item['savepath']}")
             for item in tasklist
             if not item.get("enddate")
-            or (
-                datetime.now().date()
-                <= datetime.strptime(item["enddate"], "%Y-%m-%d").date()
-            )
+               or (
+                       datetime.now().date()
+                       <= datetime.strptime(item["enddate"], "%Y-%m-%d").date()
+               )
         ]
         if not dir_paths:
             return False
@@ -418,28 +490,43 @@ class Quark:
             to_pdir_fid = (
                 get_fids[0]["fid"] if get_fids else self.mkdir(savepath)["data"]["fid"]
             )
+
+            # 删除同名文件
+            dir_file_list = self.ls_dir(to_pdir_fid)
+            del_list = [
+                item["fid"]
+                for item in dir_file_list
+                if (item["file_name"] in file_name_list)
+                   and ((datetime.now().timestamp() - item["created_at"]) < 60)
+            ]
+            print(f"删除文件列表：{del_list}")
+            if del_list:
+                self.delete(del_list)
+                recycle_list = self.recycle_list()
+                record_id_list = [
+                    item["record_id"]
+                    for item in recycle_list
+                    if item["fid"] in del_list
+                ]
+                self.recycle_remove(record_id_list)
+            time.sleep(2)
             save_file = self.save_file(
                 fid_list, fid_token_list, to_pdir_fid, pwd_id, stoken
             )
+
+            # print(f"转存文件：{save_file}")
             if save_file["code"] == 41017:
                 return
             elif save_file["code"] == 0:
-                dir_file_list = self.ls_dir(to_pdir_fid)
-                del_list = [
-                    item["fid"]
-                    for item in dir_file_list
-                    if (item["file_name"] in file_name_list)
-                    and ((datetime.now().timestamp() - item["created_at"]) < 60)
-                ]
-                if del_list:
-                    self.delete(del_list)
-                    recycle_list = self.recycle_list()
-                    record_id_list = [
-                        item["record_id"]
-                        for item in recycle_list
-                        if item["fid"] in del_list
-                    ]
-                    self.recycle_remove(record_id_list)
+            # elif save_file["code"] == 0 :
+
+                time.sleep(2)
+                my_file_list = self.ls_dir(to_pdir_fid)
+                print(f"目录文件列表：{my_file_list}")
+                save_file["save_fids"] = []
+                for item in my_file_list:
+                    if item["file_name"] in file_name_list:
+                        save_file["save_fids"].append(item["fid"])
                 return save_file
             else:
                 return False
@@ -486,9 +573,9 @@ class Quark:
                 add_notify(f"《{task['taskname']}》：{task['shareurl_ban']}")
             return tree
         elif (
-            len(share_file_list) == 1
-            and share_file_list[0]["dir"]
-            and subdir_path == ""
+                len(share_file_list) == 1
+                and share_file_list[0]["dir"]
+                and subdir_path == ""
         ):  # 仅有一个文件夹
             print("🧠 该分享是一个文件夹，读取文件夹内列表")
             share_file_list = self.get_detail(pwd_id, stoken, share_file_list[0]["fid"])
@@ -524,8 +611,8 @@ class Quark:
                 # 忽略后缀
                 if task.get("ignore_extension") and not share_file["dir"]:
                     compare_func = lambda a, b1, b2: (
-                        os.path.splitext(a)[0] == os.path.splitext(b1)[0]
-                        or os.path.splitext(a)[0] == os.path.splitext(b2)[0]
+                            os.path.splitext(a)[0] == os.path.splitext(b1)[0]
+                            or os.path.splitext(a)[0] == os.path.splitext(b2)[0]
                     )
                 else:
                     compare_func = lambda a, b1, b2: (a == b1 or a == b2)
@@ -591,6 +678,7 @@ class Quark:
                 add_notify(f"❌《{task['taskname']}》转存失败：{err_msg}\n")
         return tree
 
+
     def query_task(self, task_id):
         retry_index = 0
         while True:
@@ -625,6 +713,28 @@ class Quark:
                 time.sleep(0.500)
         return response
 
+    def share_password(self, share_id):
+        url = "https://drive-m.quark.cn/1/clouddrive/share/password"
+        querystring = {
+            "pr": "ucpro",
+            "fr": "pc",
+            "uc_param_str": "",
+        }
+        headers = self.common_headers()
+        payload = {
+            "share_id": share_id,
+        }
+        response = requests.request(
+            "POST", url, json=payload, headers=headers, params=querystring
+        ).json()
+        print(response)
+        if response["code"] == 0:
+            print(f"获取分享密码：{response['data']}")
+        else:
+            print(f"获取分享内容：{response['message']}")
+            return False
+        return response['data']
+
     def do_rename_task(self, task, subdir_path=""):
         if not task["pattern"] or not task["replace"]:
             return 0
@@ -647,7 +757,7 @@ class Quark:
                     else dir_file["file_name"]
                 )
                 if save_name != dir_file["file_name"] and (
-                    save_name not in dir_file_name_list
+                        save_name not in dir_file_name_list
                 ):
                     rename_return = self.rename(dir_file["fid"], save_name)
                     if rename_return["code"] == 0:
@@ -658,6 +768,7 @@ class Quark:
                             f"重命名：{dir_file['file_name']} → {save_name} 失败，{rename_return['message']}"
                         )
         return is_rename_count > 0
+
 
 
 class Emby:
@@ -677,7 +788,7 @@ class Emby:
         if "application/json" in response.headers["Content-Type"]:
             response = response.json()
             print(
-                f"Emby媒体库: {response.get('ServerName','')} v{response.get('Version','')}"
+                f"Emby媒体库: {response.get('ServerName', '')} v{response.get('Version', '')}"
             )
             return True
         else:
@@ -756,15 +867,15 @@ def do_sign(account):
     if growth_info:
         if growth_info["cap_sign"]["sign_daily"]:
             print(
-                f"📅 执行签到: 今日已签到+{int(growth_info['cap_sign']['sign_daily_reward']/1024/1024)}MB，连签进度({growth_info['cap_sign']['sign_progress']}/{growth_info['cap_sign']['sign_target']})✅"
+                f"📅 执行签到: 今日已签到+{int(growth_info['cap_sign']['sign_daily_reward'] / 1024 / 1024)}MB，连签进度({growth_info['cap_sign']['sign_progress']}/{growth_info['cap_sign']['sign_target']})✅"
             )
         else:
             sign, sign_return = account.get_growth_sign()
             if sign:
-                message = f"📅 执行签到: 今日签到+{int(sign_return/1024/1024)}MB，连签进度({growth_info['cap_sign']['sign_progress']+1}/{growth_info['cap_sign']['sign_target']})✅"
+                message = f"📅 执行签到: 今日签到+{int(sign_return / 1024 / 1024)}MB，连签进度({growth_info['cap_sign']['sign_progress'] + 1}/{growth_info['cap_sign']['sign_target']})✅"
                 if (
-                    CONFIG_DATA.get("push_config", {}).get("QUARK_SIGN_NOTIFY") == False
-                    or os.environ.get("QUARK_SIGN_NOTIFY") == "false"
+                        CONFIG_DATA.get("push_config", {}).get("QUARK_SIGN_NOTIFY") == False
+                        or os.environ.get("QUARK_SIGN_NOTIFY") == "false"
                 ):
                     print(message)
                 else:
@@ -786,23 +897,23 @@ def do_save(account, tasklist=[]):
 
     def check_date(task):
         return (
-            not task.get("enddate")
-            or (
-                datetime.now().date()
-                <= datetime.strptime(task["enddate"], "%Y-%m-%d").date()
-            )
-        ) and (
-            not task.get("runweek")
-            # 星期一为0，星期日为6
-            or (datetime.today().weekday() + 1 in task.get("runweek"))
-        )
+                       not task.get("enddate")
+                       or (
+                               datetime.now().date()
+                               <= datetime.strptime(task["enddate"], "%Y-%m-%d").date()
+                       )
+               ) and (
+                       not task.get("runweek")
+                       # 星期一为0，星期日为6
+                       or (datetime.today().weekday() + 1 in task.get("runweek"))
+               )
 
     # 执行任务
     for index, task in enumerate(tasklist):
         # 判断任务期限
         if check_date(task):
             print()
-            print(f"#{index+1}------------------")
+            print(f"#{index + 1}------------------")
             print(f"任务名称: {task['taskname']}")
             print(f"分享链接: {task['shareurl']}")
             print(f"目标目录: {task['savepath']}")
@@ -828,80 +939,3 @@ def do_save(account, tasklist=[]):
                     if match_emby_id:
                         task["emby_id"] = match_emby_id
                         emby.refresh(match_emby_id)
-    print()
-
-
-def main():
-    global CONFIG_DATA
-    start_time = datetime.now()
-    print(f"===============程序开始===============")
-    print(f"⏰ 执行时间: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
-    # 读取启动参数
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "quark_config.json"
-    task_index = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else ""
-    # 检查本地文件是否存在，如果不存在就下载
-    if not os.path.exists(config_path):
-        if os.environ.get("QUARK_COOKIE"):
-            print(
-                f"⚙️ 读取到 QUARK_COOKIE 环境变量，仅签到领空间。如需执行转存，请删除该环境变量后配置 {config_path} 文件"
-            )
-            cookie_val = os.environ.get("QUARK_COOKIE")
-            cookie_form_file = False
-        else:
-            print(f"⚙️ 配置文件 {config_path} 不存在❌，正远程从下载配置模版")
-            config_url = f"{GH_PROXY}https://raw.githubusercontent.com/Cp0204/quark_auto_save/main/quark_config.json"
-            if download_file(config_url, config_path):
-                print("⚙️ 配置模版下载成功✅，请到程序目录中手动配置")
-            return
-    else:
-        print(f"⚙️ 正从 {config_path} 文件中读取配置")
-        with open(config_path, "r", encoding="utf-8") as file:
-            CONFIG_DATA = json.load(file)
-        cookie_val = CONFIG_DATA.get("cookie")
-        if not CONFIG_DATA.get("magic_regex"):
-            CONFIG_DATA["magic_regex"] = MAGIC_REGEX
-        cookie_form_file = True
-    # 获取cookie
-    cookies = get_cookies(cookie_val)
-    if not cookies:
-        print("❌ cookie 未配置")
-        return
-    accounts = [Quark(cookie, index) for index, cookie in enumerate(cookies)]
-    # 签到
-    print(f"===============签到任务===============")
-    if type(task_index) is int:
-        do_sign(accounts[0])
-    else:
-        for account in accounts:
-            do_sign(account)
-    print()
-    # 转存
-    if accounts[0].is_active and cookie_form_file:
-        print(f"===============转存任务===============")
-        # 任务列表
-        tasklist = CONFIG_DATA.get("tasklist", [])
-        if type(task_index) is int:
-            do_save(accounts[0], [tasklist[task_index]])
-        else:
-            do_save(accounts[0], tasklist)
-        print()
-    # 通知
-    if NOTIFYS:
-        notify_body = "\n".join(NOTIFYS)
-        print(f"===============推送通知===============")
-        send_ql_notify("【夸克自动追更】", notify_body)
-        print()
-    if cookie_form_file:
-        # 更新配置
-        with open(config_path, "w", encoding="utf-8") as file:
-            json.dump(CONFIG_DATA, file, ensure_ascii=False, indent=2)
-
-    print(f"===============程序结束===============")
-    duration = datetime.now() - start_time
-    print(f"😃 运行时长: {round(duration.total_seconds(), 2)}s")
-    print()
-
-
-if __name__ == "__main__":
-    main()

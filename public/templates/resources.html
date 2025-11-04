@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>资源管理 - 夸克自动转存</title>
+  <!-- 引入 Bootstrap CSS -->
+  <link rel="stylesheet" href="./static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="./static/css/bootstrap-icons.css">
+  <style>
+    body {
+      padding-bottom: 60px;
+      background-color: #f8f9fa;
+    }
+
+    .resource-card {
+      margin-bottom: 20px;
+      transition: transform 0.2s;
+    }
+
+    .resource-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .poster-img {
+      width: 100%;
+      height: 300px;
+      object-fit: cover;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .no-poster {
+      width: 100%;
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-size: 48px;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .resource-info {
+      padding: 15px;
+    }
+
+    .resource-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .resource-meta {
+      font-size: 14px;
+      color: #6c757d;
+      margin-bottom: 8px;
+    }
+
+    .resource-description {
+      font-size: 14px;
+      color: #495057;
+      max-height: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+
+    .badge-custom {
+      margin-right: 5px;
+    }
+
+    .filter-bar {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .pagination-wrapper {
+      display: flex;
+      justify-content: center;
+      margin-top: 30px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 50px;
+      font-size: 18px;
+      color: #6c757d;
+    }
+
+    .stats-bar {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-item {
+      display: inline-block;
+      margin-right: 30px;
+    }
+
+    .navbar {
+      margin-bottom: 20px;
+    }
+
+    .btn-share {
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .expired-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container">
+        <a class="navbar-brand" href="/"><i class="bi bi-clouds"></i> 夸克自动转存</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ml-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/"><i class="bi bi-house"></i> 首页</a>
+            </li>
+            <li class="nav-item active">
+              <a class="nav-link" href="/resources"><i class="bi bi-folder"></i> 资源管理</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1 class="mb-4"><i class="bi bi-folder-fill"></i> 云盘资源管理</h1>
+
+      <!-- 统计栏 -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <i class="bi bi-collection"></i> 总资源数: <strong>{{ stats.total }}</strong>
+        </div>
+        <div class="stat-item">
+          <i class="bi bi-check-circle text-success"></i> 有效资源: <strong>{{ stats.active }}</strong>
+        </div>
+        <div class="stat-item">
+          <i class="bi bi-x-circle text-danger"></i> 失效资源: <strong>{{ stats.expired }}</strong>
+        </div>
+      </div>
+
+      <!-- 过滤栏 -->
+      <div class="filter-bar">
+        <div class="row">
+          <div class="col-md-3">
+            <input v-model="filters.search" @input="searchResources" type="text" class="form-control"
+              placeholder="搜索资源名称...">
+          </div>
+          <div class="col-md-2">
+            <select v-model="filters.is_expired" @change="loadResources" class="form-control">
+              <option value="0">仅有效资源</option>
+              <option value="1">仅失效资��</option>
+              <option value="all">全部资源</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <select v-model="filters.sort_by" @change="loadResources" class="form-control">
+              <option value="update_time">更新时间</option>
+              <option value="create_time">创建时间</option>
+              <option value="hot">热度</option>
+              <option value="view_count">浏览次数</option>
+              <option value="share_count">分享次数</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <select v-model="filters.order" @change="loadResources" class="form-control">
+              <option value="desc">降序</option>
+              <option value="asc">升序</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <select v-model="pagination.per_page" @change="loadResources" class="form-control">
+              <option :value="12">12 条/页</option>
+              <option :value="24">24 条/页</option>
+              <option :value="48">48 条/页</option>
+            </select>
+          </div>
+          <div class="col-md-1">
+            <button @click="loadResources" class="btn btn-primary btn-block">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-if="loading" class="loading">
+        <i class="bi bi-arrow-repeat spin"></i> 加载中...
+      </div>
+
+      <!-- 资源列��� -->
+      <div v-else class="row">
+        <div v-for="item in resources" :key="item.id" class="col-md-3">
+          <div class="card resource-card">
+            <div style="position: relative;">
+              <img v-if="item.tmdb && item.tmdb.poster_url" :src="item.tmdb.poster_url" :alt="item.drama_name"
+                class="poster-img">
+              <div v-else class="no-poster">
+                <i class="bi bi-film"></i>
+              </div>
+              <div v-if="item.is_expired === 1" class="expired-overlay">
+                <i class="bi bi-exclamation-triangle"></i> 已失效
+              </div>
+            </div>
+            <div class="resource-info">
+              <div class="resource-title" :title="item.drama_name">
+                {{ item.drama_name }}
+              </div>
+              <div class="resource-meta">
+                <span v-if="item.tmdb && item.tmdb.year_released" class="badge badge-info badge-custom">
+                  {{ item.tmdb.year_released }}
+                </span>
+                <span v-if="item.tmdb && item.tmdb.category" class="badge badge-secondary badge-custom">
+                  {{ item.tmdb.category }}
+                </span>
+                <span v-if="item.category2" class="badge badge-warning badge-custom">
+                  {{ item.category2 }}
+                </span>
+              </div>
+              <div class="resource-description" :title="item.tmdb ? item.tmdb.description : '暂无描述'">
+                {{ item.tmdb ? item.tmdb.description : '暂无描述信息' }}
+              </div>
+              <div class="resource-meta" style="margin-top: 10px;">
+                <i class="bi bi-eye"></i> {{ item.view_count }}
+                <i class="bi bi-share" style="margin-left: 10px;"></i> {{ item.share_count }}
+                <i class="bi bi-fire" style="margin-left: 10px;"></i> {{ item.hot }}
+              </div>
+              <button @click="openTmdbModal(item)" class="btn btn-info btn-share">
+                <i class="bi bi-search"></i> 匹配TMDB
+              </button>
+              <button v-if="item.is_expired === 0" @click="shareToTelegram(item.id)"
+                :disabled="item.sharing"
+                class="btn btn-success btn-share">
+                <i class="bi bi-telegram"></i>
+                <span v-if="item.sharing">投稿中...</span>
+                <span v-else>一键投稿</span>
+              </button>
+              <a v-if="item.link" :href="item.link" target="_blank" class="btn btn-primary btn-share">
+                <i class="bi bi-link-45deg"></i> 打开链接
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分页 -->
+      <div v-if="!loading && resources.length > 0" class="pagination-wrapper">
+        <nav>
+          <ul class="pagination">
+            <li class="page-item" :class="{ disabled: pagination.page === 1 }">
+              <a class="page-link" @click="changePage(pagination.page - 1)" href="javascript:;">上一页</a>
+            </li>
+            <li v-for="page in visiblePages" :key="page" class="page-item"
+              :class="{ active: page === pagination.page }">
+              <a class="page-link" @click="changePage(page)" href="javascript:;">{{ page }}</a>
+            </li>
+            <li class="page-item" :class="{ disabled: pagination.page === totalPages }">
+              <a class="page-link" @click="changePage(pagination.page + 1)" href="javascript:;">下一页</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-if="!loading && resources.length === 0" class="text-center" style="padding: 50px;">
+        <i class="bi bi-inbox" style="font-size: 64px; color: #ccc;"></i>
+        <p style="margin-top: 20px; color: #6c757d;">暂无资源数据</p>
+      </div>
+    </div>
+
+    <!-- TMDB匹配模态框 -->
+    <div class="modal fade" id="tmdbModal" tabindex="-1" role="dialog" aria-labelledby="tmdbModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="tmdbModalLabel">
+              <i class="bi bi-search"></i> 匹配TMDB信息
+            </h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <!-- 搜索框 -->
+            <div class="form-group">
+              <label>剧名</label>
+              <div class="input-group">
+                <input v-model="tmdbSearch.query" @keyup.enter="searchTmdb" type="text" class="form-control"
+                  placeholder="输入剧名搜索...">
+                <div class="input-group-append">
+                  <button @click="searchTmdb" :disabled="tmdbSearch.searching" class="btn btn-primary">
+                    <i class="bi bi-search"></i>
+                    <span v-if="tmdbSearch.searching">搜索中...</span>
+                    <span v-else>搜索</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 搜索结果 -->
+            <div v-if="tmdbSearch.results.length > 0" style="max-height: 400px; overflow-y: auto;">
+              <div v-for="result in tmdbSearch.results" :key="result.id" class="card mb-2"
+                style="cursor: pointer; border: 2px solid transparent;"
+                :style="{ borderColor: tmdbSearch.selectedId === result.id ? '#007bff' : 'transparent' }"
+                @click="selectTmdbResult(result)">
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-md-2">
+                      <img v-if="result.poster_path"
+                        :src="'https://image.tmdb.org/t/p/w200' + result.poster_path"
+                        :alt="result.title || result.name" class="img-fluid" style="border-radius: 4px;">
+                      <div v-else
+                        style="width: 100%; height: 150px; background: #ccc; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
+                        <i class="bi bi-film" style="font-size: 32px; color: white;"></i>
+                      </div>
+                    </div>
+                    <div class="col-md-10">
+                      <h6>
+                        {{ result.title || result.name }}
+                        <span v-if="result.release_date || result.first_air_date" class="badge badge-secondary">
+                          {{ (result.release_date || result.first_air_date).split('-')[0] }}
+                        </span>
+                        <span class="badge badge-info">
+                          {{ result.media_type === 'movie' ? '电影' : '剧集' }}
+                        </span>
+                        <span v-if="result.category" class="badge badge-light">
+                          {{ result.category }}
+                        </span>
+                        <i v-if="tmdbSearch.selectedId === result.id" class="bi bi-check-circle-fill text-primary"></i>
+                      </h6>
+                      <p class="text-muted mb-0" style="font-size: 14px;">
+                        {{ result.overview || '暂无简介' }}
+                      </p>
+                      <div class="mt-2">
+                        <span class="badge badge-warning">
+                          <i class="bi bi-star-fill"></i> {{ result.vote_average ? result.vote_average.toFixed(1) : 'N/A' }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 无结果提示 -->
+            <div v-if="!tmdbSearch.searching && tmdbSearch.searched && tmdbSearch.results.length === 0"
+              class="text-center text-muted" style="padding: 30px;">
+              <i class="bi bi-inbox" style="font-size: 48px;"></i>
+              <p style="margin-top: 10px;">未找到匹配结果，请尝试其他关键词</p>
+            </div>
+
+            <!-- 搜索前提示 -->
+            <div v-if="!tmdbSearch.searched" class="text-center text-muted" style="padding: 30px;">
+              <i class="bi bi-info-circle" style="font-size: 48px;"></i>
+              <p style="margin-top: 10px;">输入剧名并点击搜索按钮开始查询</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+            <button type="button" @click="confirmTmdbMatch" :disabled="!tmdbSearch.selectedId || tmdbSearch.matching"
+              class="btn btn-primary">
+              <span v-if="tmdbSearch.matching">匹配中...</span>
+              <span v-else>确认匹配</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入 Vue.js 和 Axios -->
+  <script src="./static/js/vue@2.js"></script>
+  <script src="./static/js/axios.min.js"></script>
+  <script src="./static/js/jquery-3.5.1.slim.min.js"></script>
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    new Vue({
+      el: '#app',
+      data: {
+        resources: [],
+        loading: true,
+        stats: {
+          total: 0,
+          active: 0,
+          expired: 0
+        },
+        filters: {
+          search: '',
+          is_expired: '0',
+          sort_by: 'update_time',
+          order: 'desc'
+        },
+        pagination: {
+          page: 1,
+          per_page: 12,
+          total: 0
+        },
+        searchTimeout: null,
+        tmdbSearch: {
+          resourceId: null,
+          query: '',
+          searching: false,
+          searched: false,
+          results: [],
+          selectedId: null,
+          selectedResult: null,
+          matching: false
+        }
+      },
+      computed: {
+        totalPages() {
+          return Math.ceil(this.pagination.total / this.pagination.per_page);
+        },
+        visiblePages() {
+          const current = this.pagination.page;
+          const total = this.totalPages;
+          const delta = 2;
+          const range = [];
+          const rangeWithDots = [];
+
+          for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+            range.push(i);
+          }
+
+          if (current - delta > 2) {
+            rangeWithDots.push(1, '...');
+          } else {
+            rangeWithDots.push(1);
+          }
+
+          rangeWithDots.push(...range);
+
+          if (current + delta < total - 1) {
+            rangeWithDots.push('...', total);
+          } else if (total > 1) {
+            rangeWithDots.push(total);
+          }
+
+          return rangeWithDots;
+        }
+      },
+      mounted() {
+        this.loadResources();
+        this.loadStats();
+      },
+      methods: {
+        async loadResources() {
+          this.loading = true;
+          try {
+            const params = {
+              page: this.pagination.page,
+              per_page: this.pagination.per_page,
+              sort_by: this.filters.sort_by,
+              order: this.filters.order,
+              is_expired: this.filters.is_expired,
+              search: this.filters.search
+            };
+
+            const response = await axios.get('/api/resources', { params });
+            this.resources = response.data.data.map(item => ({
+              ...item,
+              sharing: false
+            }));
+            this.pagination.total = response.data.total;
+          } catch (error) {
+            console.error('加载资源失败:', error);
+            alert('加载资源失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            this.loading = false;
+          }
+        },
+        async loadStats() {
+          try {
+            const [allRes, activeRes, expiredRes] = await Promise.all([
+              axios.get('/api/resources', { params: { is_expired: 'all', per_page: 1 } }),
+              axios.get('/api/resources', { params: { is_expired: '0', per_page: 1 } }),
+              axios.get('/api/resources', { params: { is_expired: '1', per_page: 1 } })
+            ]);
+            this.stats.total = allRes.data.total;
+            this.stats.active = activeRes.data.total;
+            this.stats.expired = expiredRes.data.total;
+          } catch (error) {
+            console.error('加载统计失败:', error);
+          }
+        },
+        async shareToTelegram(resourceId) {
+          const resource = this.resources.find(r => r.id === resourceId);
+          if (!resource) return;
+
+          if (!confirm(`确定要将《${resource.drama_name}》投稿到 Telegram 吗？`)) {
+            return;
+          }
+
+          resource.sharing = true;
+          try {
+            const response = await axios.post(`/api/share_to_tg/${resourceId}`);
+            alert('投稿成功！');
+            this.loadResources();
+          } catch (error) {
+            console.error('投稿失败:', error);
+            alert('投稿失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            resource.sharing = false;
+          }
+        },
+        searchResources() {
+          // 防抖搜索
+          if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
+          }
+          this.searchTimeout = setTimeout(() => {
+            this.pagination.page = 1;
+            this.loadResources();
+          }, 500);
+        },
+        changePage(page) {
+          if (page < 1 || page > this.totalPages || page === this.pagination.page) {
+            return;
+          }
+          this.pagination.page = page;
+          this.loadResources();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        openTmdbModal(resource) {
+          // 重置搜索状态
+          this.tmdbSearch = {
+            resourceId: resource.id,
+            query: resource.drama_name,
+            searching: false,
+            searched: false,
+            results: [],
+            selectedId: null,
+            selectedResult: null,
+            matching: false
+          };
+          // 打开模态框
+          $('#tmdbModal').modal('show');
+        },
+        async searchTmdb() {
+          if (!this.tmdbSearch.query.trim()) {
+            alert('请输入剧名');
+            return;
+          }
+
+          this.tmdbSearch.searching = true;
+          this.tmdbSearch.results = [];
+          this.tmdbSearch.selectedId = null;
+          this.tmdbSearch.selectedResult = null;
+
+          try {
+            const response = await axios.get('/api/search_tmdb', {
+              params: { query: this.tmdbSearch.query }
+            });
+            this.tmdbSearch.results = response.data.results || [];
+            this.tmdbSearch.searched = true;
+          } catch (error) {
+            console.error('搜索TMDB失败:', error);
+            alert('搜索失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            this.tmdbSearch.searching = false;
+          }
+        },
+        selectTmdbResult(result) {
+          this.tmdbSearch.selectedId = result.id;
+          this.tmdbSearch.selectedResult = result;
+        },
+        async confirmTmdbMatch() {
+          if (!this.tmdbSearch.selectedResult) {
+            alert('请选择一个TMDB条目');
+            return;
+          }
+
+          this.tmdbSearch.matching = true;
+          try {
+            const response = await axios.post('/api/match_tmdb', {
+              resource_id: this.tmdbSearch.resourceId,
+              tmdb_id: this.tmdbSearch.selectedResult.id,
+              media_type: this.tmdbSearch.selectedResult.media_type,
+              title: this.tmdbSearch.selectedResult.title || this.tmdbSearch.selectedResult.name,
+              year_released: (this.tmdbSearch.selectedResult.release_date || this.tmdbSearch.selectedResult.first_air_date || '').split('-')[0],
+              poster_path: this.tmdbSearch.selectedResult.poster_path,
+              overview: this.tmdbSearch.selectedResult.overview,
+              vote_average: this.tmdbSearch.selectedResult.vote_average,
+              category: this.tmdbSearch.selectedResult.category
+            });
+
+            alert('匹配成功！');
+            $('#tmdbModal').modal('hide');
+            this.loadResources();
+          } catch (error) {
+            console.error('匹配失败:', error);
+            alert('匹配失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            this.tmdbSearch.matching = false;
+          }
+        }
+      }
+    });
+  </script>
+
+  <style>
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+  </style>
+</body>
+
+</html>

@@ -7,8 +7,11 @@ WORKDIR /app
 # 将当前目录中的文件添加到工作目录中
 COPY . /app
 
+# 复制依赖文件
+COPY requirements.txt /app/
+
 # 安装依赖
-RUN pip install --no-cache-dir flask apscheduler requests treelib
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 时区
 ENV TZ="Asia/Shanghai"

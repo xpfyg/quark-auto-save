@@ -36,7 +36,19 @@
 
 <body>
   <div id="app" class="container mt-5">
-    <h1 class="mb-4"><i class="bi bi-clouds"></i> 夸克自动转存</h1>
+    <div class="row mb-4">
+      <div class="col">
+        <h1><i class="bi bi-clouds"></i> 夸克自动转存</h1>
+      </div>
+      <div class="col text-right">
+        <a href="/resources" class="btn btn-primary">
+          <i class="bi bi-folder"></i> 资源管理
+        </a>
+        <a href="/logout" class="btn btn-outline-secondary">
+          <i class="bi bi-box-arrow-right"></i> 退出
+        </a>
+      </div>
+    </div>
     <form @submit.prevent="saveConfig">
 
       <div class="row title">
