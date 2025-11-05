@@ -1,6 +1,8 @@
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+
+from dotenv import load_dotenv
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
@@ -12,7 +14,7 @@ from sqlalchemy.pool import QueuePool
 app = Flask(__name__)
 
 db = SQLAlchemy()
-
+load_dotenv()
 # 从环境变量读取数据库配置
 DB_USERNAME = os.environ.get('DB_USERNAME', '')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', '')

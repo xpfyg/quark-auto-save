@@ -21,6 +21,9 @@ import json
 import os
 import sys
 import asyncio
+import threading
+
+from task_handlers import register_all_handlers
 
 # 添加当前目录到系统路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -369,15 +372,22 @@ def share_to_tg(resource_id):
         # 创建资源管理器
         manager = ResourceManager(cookie)
 
-        # 执行分享（异步）
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(manager.shareToTgBot(resource_id))
-            db_session.commit()  # 确保更新已提交
-            return jsonify({"success": True, "message": "投稿成功"})
-        finally:
-            loop.close()
+        # 在后台事件循环中执行异步任务
+        if queue_loop and queue_loop.is_running():
+            # 使用 asyncio.run_coroutine_threadsafe 在后台事件循环中执行
+            future = asyncio.run_coroutine_threadsafe(
+                manager.shareToTgBot(resource_id),
+                queue_loop
+            )
+            # 等待任务完成（设置超时）
+            result = future.result(timeout=10)
+
+            if result:
+                return jsonify({"success": True, "message": "任务已加入队列"})
+            else:
+                return jsonify({"error": "任务加入队列失败"}), 500
+        else:
+            return jsonify({"error": "队列管理器未运行"}), 500
 
     except Exception as e:
         db_session.rollback()
@@ -414,6 +424,34 @@ def update_resource_status(resource_id):
         return jsonify({"error": str(e)}), 500
 
 
+# 获取队列状态
+@app.route("/api/queue_status", methods=["GET"])
+def get_queue_status():
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        from telegram_queue_manager import QueueManager, TaskType
+
+        # 在后台事件循环中获取状态
+        async def get_status():
+            queue_manager = await QueueManager.get_instance()
+            return queue_manager.get_status()
+
+        if queue_loop and queue_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(get_status(), queue_loop)
+            status = future.result(timeout=5)
+            return jsonify({"success": True, "status": status})
+        else:
+            return jsonify({"error": "队列管理器未运行"}), 500
+
+    except Exception as e:
+        logging.error(f"获取队列状态失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 # 搜索TMDB
 @app.route("/api/search_tmdb", methods=["GET"])
 def search_tmdb():
@@ -430,7 +468,7 @@ def search_tmdb():
 
         # 创建服务实例并搜索
         tmdb_service = TmdbService()
-        results = tmdb_service.search_multi(query, max_results=10)
+        results = tmdb_service.search_multi(query, max_results=20)
 
         return jsonify({
             "success": True,
@@ -537,7 +575,64 @@ def match_tmdb():
         return jsonify({"error": str(e)}), 500
 
 
+# 后台事件循环线程
+queue_loop = None
+queue_thread = None
+
+
+def start_queue_manager_thread():
+    """在后台线程中启动队列管理器"""
+    global queue_loop, queue_thread
+
+    def run_event_loop():
+        """在新线程中运行事件循环"""
+        global queue_loop
+        try:
+            # 创建新的事件循环
+            queue_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(queue_loop)
+
+            # 注册所有处理器并启动队列管理器
+            queue_loop.run_until_complete(register_all_handlers())
+
+            logging.info("✅ 队列管理器已在后台线程启动")
+
+            # 保持事件循环运行
+            queue_loop.run_forever()
+
+        except Exception as e:
+            logging.error(f"❌ 队列管理器启动失败: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if queue_loop:
+                queue_loop.close()
+                logging.info("🔌 队列管理器事件循环已关闭")
+
+    # 创建并启动后台线程
+    queue_thread = threading.Thread(target=run_event_loop, daemon=True)
+    queue_thread.start()
+    logging.info("🚀 队列管理器后台线程已启动")
+
+
+def stop_queue_manager():
+    """停止队列管理器"""
+    global queue_loop
+
+    if queue_loop and queue_loop.is_running():
+        logging.info("🛑 正在停止队列管理器...")
+        queue_loop.call_soon_threadsafe(queue_loop.stop)
+
+
 if __name__ == "__main__":
     init()
     reload_tasks()
-    app.run(debug=DEBUG, host="0.0.0.0", port=5005)
+
+    # 启动队列管理器后台线程
+    start_queue_manager_thread()
+
+    try:
+        app.run(debug=DEBUG, host="0.0.0.0", port=5005)
+    finally:
+        # 程序退出时停止队列管理器
+        stop_queue_manager()

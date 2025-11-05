@@ -25,7 +25,8 @@ from telegram_sdk.tg import TgClient
 
 # TMDB API配置
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")  # 需要在环境变量中设置
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
+# TMDB_BASE_URL = "https://api.themoviedb.org/3"
+TMDB_BASE_URL = "http://api.tmdb.org/3"
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 
 
@@ -188,7 +189,7 @@ class TmdbService:
                 "api_key": self.api_key,
                 "query": query,
                 "language": "zh-CN",
-                "page": 1
+                "page": 1,
             }
 
             response = requests.get(url, params=params, timeout=10)
@@ -243,7 +244,8 @@ class ResourceManager:
         :param drive_type: 网盘类型，默认quark
         """
         self.quark = Quark(cookie, index=0)
-        self.tg_client = TgClient()
+        # 不再在初始化时创建 TgClient，而是在需要时动态创建
+        # 避免 session 文件锁定问题
         self.drive_type = drive_type
         self.tmdb_service = TmdbService()
 
@@ -407,23 +409,28 @@ class ResourceManager:
 
     async def shareToTgBot(self, id):
         """
-        分享资源到Telegram机器人
+        分享资源到Telegram机器人（使用队列管理器）
         :param id: 资源ID
-        :return: None
+        :return: bool - 是否成功加入队列
         """
+        from telegram_queue_manager import QueueManager, Task, TaskType
+
         resource = db_session.query(CloudResource).filter(
             CloudResource.id == id
         ).first()
         if not resource:
             print(f"❌ 资源不存在: {id}")
-            return
+            return False
+
         # 检查资源是否过期
         if resource.is_expired:
             print(f"❌ 资源已过期: {resource.drama_name}")
-            return
+            return False
+
         if not self.check_share_link(resource.link):
             print(f"❌ 资源已失效: {resource.drama_name}")
-            return
+            return False
+
         if resource.tmdb_id is None:
             print(f"🎬 正在查询TMDB信息...")
             # 使用资源的 category2 字段（如果存在）来优化 TMDB 查询
@@ -458,11 +465,12 @@ class ResourceManager:
                 db_session.commit()
             else:
                 print(f"⚠️ 未找到TMDB信息: {resource.drama_name}")
-                return
+                return False
         else:
             existing_tmdb = db_session.query(Tmdb).filter(
                 Tmdb.id == resource.tmdb_id
             ).first()
+
         title = resource.drama_name
         file_path = "./resource/tmdb/" + str(
             existing_tmdb.year_released) + "/" + existing_tmdb.title + "#" + existing_tmdb.tmdb_code + ".jpg"
@@ -475,17 +483,30 @@ class ResourceManager:
                 time.sleep(3)
             break
 
-        rst = await self.tg_client.sendToTgBotForQuark1(title, existing_tmdb.description.strip(), resource.link, existing_tmdb.category, file_path)
-        if rst:
-            print(f"✅ 资源已分享到Telegram机器人: {title}")
-            db_session.query(CloudResource).filter(
-                CloudResource.id == id
-            ).update({
-                CloudResource.share_count: resource.share_count + 1,
-                CloudResource.last_share_time: datetime.now(),
-                CloudResource.update_time: datetime.now()
-            })
-            db_session.commit()  # 提交更新
+        # 创建任务数据
+        task_data = {
+            "resource_id": id,
+            "title": title,
+            "description": existing_tmdb.description.strip(),
+            "link": resource.link,
+            "category": existing_tmdb.category,
+            "file_path": file_path
+        }
+
+        # 创建任务对象
+        task = Task(
+            task_type=TaskType.TELEGRAM_SHARE,
+            task_data=task_data
+        )
+
+        # 获取队列管理器并添加任务
+        queue_manager = await QueueManager.get_instance()
+        success = await queue_manager.add_task(task)
+
+        if success:
+            print(f"✅ 任务已成功加入队列: {title}")
+            return True
         else:
-            print(f"❌ 资源分享到Telegram机器人失败: {title}")
+            print(f"❌ 任务加入队列失败: {title}")
+            return False
 
