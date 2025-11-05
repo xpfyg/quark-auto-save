@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>网盘资源 - 夸克自动转存</title>
+  <link rel="stylesheet" href="./static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="./static/css/bootstrap-icons.css">
+  <style>
+    body {
+      padding-bottom: 60px;
+      background-color: #f8f9fa;
+    }
+
+    .breadcrumb-nav {
+      background: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .file-list {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .file-item {
+      padding: 15px 20px;
+      border-bottom: 1px solid #dee2e6;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .file-item:hover {
+      background-color: #f8f9fa;
+    }
+
+    .file-item:last-child {
+      border-bottom: none;
+    }
+
+    .file-icon {
+      font-size: 24px;
+      margin-right: 15px;
+      width: 30px;
+      text-align: center;
+    }
+
+    .file-name {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .file-size {
+      color: #6c757d;
+      margin-right: 15px;
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .file-time {
+      color: #6c757d;
+      margin-right: 15px;
+      min-width: 150px;
+    }
+
+    .file-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 50px;
+      font-size: 18px;
+      color: #6c757d;
+    }
+
+    .breadcrumb-item {
+      cursor: pointer;
+    }
+
+    .breadcrumb-item:hover {
+      text-decoration: underline;
+    }
+
+    .selected-files-bar {
+      background: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      display: none;
+    }
+
+    .selected-files-bar.show {
+      display: block;
+    }
+
+    .file-checkbox {
+      margin-right: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container">
+        <a class="navbar-brand" href="/"><i class="bi bi-clouds"></i> 夸克自动转存</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ml-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="/"><i class="bi bi-house"></i> 首页</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/resources"><i class="bi bi-folder"></i> 资源管理</a>
+            </li>
+            <li class="nav-item active">
+              <a class="nav-link" href="/quark_files"><i class="bi bi-cloud"></i> 网盘资源</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <h1 class="mb-4"><i class="bi bi-cloud-fill"></i> 夸克网盘资源</h1>
+
+      <!-- 路径导航 -->
+      <div class="breadcrumb-nav">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+              <a href="javascript:;" @click="navigateTo(0)">
+                <i class="bi bi-house-door"></i> 根目录
+              </a>
+            </li>
+            <li v-for="(item, index) in pathStack.slice(1)" :key="index" class="breadcrumb-item">
+              <a href="javascript:;" @click="navigateTo(index + 1)">{{ item.name }}</a>
+            </li>
+          </ol>
+        </nav>
+      </div>
+
+      <!-- 已选文件操作栏 -->
+      <div class="selected-files-bar" :class="{ show: selectedFiles.length > 0 }">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            已选择 <strong>{{ selectedFiles.length }}</strong> 个文件/文件夹
+          </div>
+          <div>
+            <button @click="batchShareAndSave" :disabled="processing" class="btn btn-success">
+              <i class="bi bi-share"></i>
+              <span v-if="processing">处理中...</span>
+              <span v-else>批量分享并保存</span>
+            </button>
+            <button @click="clearSelection" class="btn btn-secondary ml-2">
+              <i class="bi bi-x"></i> 取消选择
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 加载中 -->
+      <div v-if="loading" class="loading">
+        <i class="bi bi-arrow-repeat spin"></i> 加载中...
+      </div>
+
+      <!-- 文件列表 -->
+      <div v-else class="file-list">
+        <div v-if="files.length === 0" class="text-center" style="padding: 50px;">
+          <i class="bi bi-inbox" style="font-size: 64px; color: #ccc;"></i>
+          <p style="margin-top: 20px; color: #6c757d;">此目录为空</p>
+        </div>
+
+        <div v-for="file in files" :key="file.fid" class="file-item">
+          <div class="d-flex align-items-center">
+            <input type="checkbox" class="file-checkbox" :checked="isSelected(file.fid)"
+              @change="toggleSelection(file)">
+
+            <i :class="getFileIcon(file)" class="file-icon"></i>
+
+            <div class="file-name" @click="handleFileClick(file)" style="cursor: pointer;">
+              {{ file.file_name }}
+            </div>
+
+            <div class="file-size">
+              {{ file.dir ? '-' : formatSize(file.size) }}
+            </div>
+
+            <div class="file-time">
+              {{ formatTime(file.updated_at) }}
+            </div>
+
+            <div class="file-actions">
+              <button @click="shareAndSave(file)" :disabled="file.processing"
+                class="btn btn-sm btn-primary">
+                <i class="bi bi-share"></i>
+                <span v-if="file.processing">处理中...</span>
+                <span v-else>{{ file.dir ? '分享文件夹' : '分享文件' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./static/js/vue@2.js"></script>
+  <script src="./static/js/axios.min.js"></script>
+  <script src="./static/js/jquery-3.5.1.slim.min.js"></script>
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    new Vue({
+      el: '#app',
+      data: {
+        files: [],
+        loading: true,
+        processing: false,
+        pathStack: [{ fid: '0', name: '根目录' }],
+        selectedFiles: []
+      },
+      mounted() {
+        this.loadFiles('0');
+      },
+      methods: {
+        async loadFiles(fid) {
+          this.loading = true;
+          this.selectedFiles = [];
+          try {
+            const response = await axios.get('/api/quark/ls_dir', {
+              params: { pdir_fid: fid }
+            });
+            this.files = response.data.files.map(file => ({
+              ...file,
+              processing: false
+            }));
+          } catch (error) {
+            console.error('加载文件列表失败:', error);
+            alert('加载失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            this.loading = false;
+          }
+        },
+        handleFileClick(file) {
+          if (file.dir) {
+            // 进入目录
+            this.pathStack.push({ fid: file.fid, name: file.file_name });
+            this.loadFiles(file.fid);
+          }
+        },
+        navigateTo(index) {
+          this.pathStack = this.pathStack.slice(0, index + 1);
+          const current = this.pathStack[this.pathStack.length - 1];
+          this.loadFiles(current.fid);
+        },
+        async shareAndSave(file) {
+          const itemType = file.dir ? '文件夹' : '文件';
+          const confirmMsg = file.dir
+            ? `确定要分享文件夹《${file.file_name}》吗？\n\n文件夹会作为一个整体分享，包含其中的所有内容。`
+            : `确定要分享文件《${file.file_name}》吗？`;
+
+          if (!confirm(confirmMsg)) {
+            return;
+          }
+
+          file.processing = true;
+          try {
+            const response = await axios.post('/api/quark/share_and_save', {
+              fid: file.fid,
+              file_name: file.file_name,
+              is_dir: file.dir || false
+            });
+
+            const message = response.data.message || '操作成功！';
+            alert(message + `\n\n已保存为资源并添加TMDB更新任务。`);
+
+            // 刷新列表
+            const current = this.pathStack[this.pathStack.length - 1];
+            this.loadFiles(current.fid);
+          } catch (error) {
+            console.error('分享失败:', error);
+            alert('操作失败: ' + (error.response?.data?.error || error.message));
+          } finally {
+            file.processing = false;
+          }
+        },
+        async batchShareAndSave() {
+          if (this.selectedFiles.length === 0) {
+            alert('请先选择文件');
+            return;
+          }
+
+          const fileCount = this.selectedFiles.length;
+          const dirCount = this.selectedFiles.filter(f => f.dir).length;
+          const regularFileCount = fileCount - dirCount;
+
+          let confirmMsg = `确定要批量分享已选择的 ${fileCount} 项吗？\n\n`;
+          if (dirCount > 0) {
+            confirmMsg += `• 文件夹: ${dirCount} 个\n`;
+          }
+          if (regularFileCount > 0) {
+            confirmMsg += `• 文件: ${regularFileCount} 个\n`;
+          }
+          confirmMsg += '\n所有项目将被分享并保存到资源库。';
+
+          if (!confirm(confirmMsg)) {
+            return;
+          }
+
+          this.processing = true;
+          let successCount = 0;
+          let failCount = 0;
+          const failedItems = [];
+
+          for (const file of this.selectedFiles) {
+            try {
+              await axios.post('/api/quark/share_and_save', {
+                fid: file.fid,
+                file_name: file.file_name,
+                is_dir: file.dir || false
+              });
+              successCount++;
+            } catch (error) {
+              console.error(`分享 ${file.file_name} 失败:`, error);
+              failCount++;
+              failedItems.push(file.file_name);
+            }
+          }
+
+          this.processing = false;
+
+          let resultMsg = `批量操作完成！\n\n✅ 成功: ${successCount} 个\n`;
+          if (failCount > 0) {
+            resultMsg += `❌ 失败: ${failCount} 个\n`;
+            if (failedItems.length > 0) {
+              resultMsg += `\n失败的项目:\n${failedItems.slice(0, 5).join('\n')}`;
+              if (failedItems.length > 5) {
+                resultMsg += `\n... 还有 ${failedItems.length - 5} 个`;
+              }
+            }
+          }
+
+          alert(resultMsg);
+
+          // 刷新列表和清空选择
+          this.clearSelection();
+          const current = this.pathStack[this.pathStack.length - 1];
+          this.loadFiles(current.fid);
+        },
+        toggleSelection(file) {
+          const index = this.selectedFiles.findIndex(f => f.fid === file.fid);
+          if (index > -1) {
+            this.selectedFiles.splice(index, 1);
+          } else {
+            this.selectedFiles.push(file);
+          }
+        },
+        isSelected(fid) {
+          return this.selectedFiles.some(f => f.fid === fid);
+        },
+        clearSelection() {
+          this.selectedFiles = [];
+        },
+        getFileIcon(file) {
+          if (file.dir) {
+            return 'bi bi-folder-fill text-warning';
+          }
+          const ext = file.file_name.split('.').pop().toLowerCase();
+          if (['mp4', 'mkv', 'avi', 'mov', 'wmv'].includes(ext)) {
+            return 'bi bi-film text-danger';
+          } else if (['mp3', 'wav', 'flac'].includes(ext)) {
+            return 'bi bi-music-note text-info';
+          } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(ext)) {
+            return 'bi bi-image text-success';
+          } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+            return 'bi bi-file-zip text-secondary';
+          }
+          return 'bi bi-file-earmark text-muted';
+        },
+        formatSize(bytes) {
+          if (!bytes || bytes === 0) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        },
+        formatTime(timestamp) {
+          if (!timestamp) return '-';
+          // 时间戳已经是毫秒级别，直接使用
+          const date = new Date(timestamp);
+          return date.toLocaleString('zh-CN');
+        }
+      }
+    });
+  </script>
+
+  <style>
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+  </style>
+</body>
+
+</html>

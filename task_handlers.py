@@ -281,17 +281,19 @@ async def register_all_handlers():
     print("注册任务处理器")
     print("=" * 60)
 
-    # 获取队列管理器实例
-    queue_manager = await QueueManager.get_instance()
+    import telegram_queue_manager as qm
+
+    # 初始化队列管理器（如果还未初始化）
+    await qm.initialize_queue_manager()
 
     # 注册各种任务处理器
-    queue_manager.register_handler(TaskType.TELEGRAM_SHARE, handle_telegram_share)
-    queue_manager.register_handler(TaskType.RESOURCE_SYNC, handle_resource_sync)
-    queue_manager.register_handler(TaskType.TMDB_UPDATE, handle_tmdb_update)
-    queue_manager.register_handler(TaskType.FILE_DOWNLOAD, handle_file_download)
+    qm.register_handler(qm.TaskType.TELEGRAM_SHARE, handle_telegram_share)
+    qm.register_handler(qm.TaskType.RESOURCE_SYNC, handle_resource_sync)
+    qm.register_handler(qm.TaskType.TMDB_UPDATE, handle_tmdb_update)
+    qm.register_handler(qm.TaskType.FILE_DOWNLOAD, handle_file_download)
 
     # 启动队列管理器
-    await queue_manager.start()
+    await qm.start_queue_manager()
 
     print("\n✅ 所有任务处理器已注册并启动")
     print("=" * 60 + "\n")

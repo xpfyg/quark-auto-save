@@ -422,3 +422,94 @@ class QueueManager:
         else:
             for task_type in self.handlers.keys():
                 self.clear_history(task_type)
+
+
+# ============================================================================
+# 模块级别的全局实例和便捷函数
+# ============================================================================
+
+_global_manager: Optional[QueueManager] = None
+
+
+async def initialize_queue_manager() -> QueueManager:
+    """
+    初始化全局队列管理器（应在应用启动时调用一次）
+
+    Returns:
+        QueueManager: 队列管理器实例
+    """
+    global _global_manager
+    if _global_manager is None:
+        _global_manager = await QueueManager.get_instance()
+    return _global_manager
+
+
+def get_queue_manager() -> Optional[QueueManager]:
+    """
+    获取全局队列管理器实例（同步方法）
+
+    Returns:
+        QueueManager: 队列管理器实例，如果未初始化则返回 None
+    """
+    return _global_manager
+
+
+async def add_task(task: Task) -> bool:
+    """
+    添加任务到队列（便捷函数）
+
+    Args:
+        task: Task 对象
+
+    Returns:
+        bool: 是否成功添加
+    """
+    if _global_manager is None:
+        print("❌ 队列管理器未初始化")
+        return False
+    return await _global_manager.add_task(task)
+
+
+def register_handler(task_type: TaskType, handler: TaskHandler):
+    """
+    注册任务处理器（便捷函数）
+
+    Args:
+        task_type: 任务类型
+        handler: 任务处理函数
+    """
+    if _global_manager is None:
+        print("❌ 队列管理器未初始化")
+        return
+    _global_manager.register_handler(task_type, handler)
+
+
+async def start_queue_manager():
+    """启动队列管理器（便捷函数）"""
+    if _global_manager is None:
+        print("❌ 队列管理器未初始化")
+        return
+    await _global_manager.start()
+
+
+async def stop_queue_manager():
+    """停止队列管理器（便捷函数）"""
+    if _global_manager is None:
+        print("❌ 队列管理器未初始化")
+        return
+    await _global_manager.stop()
+
+
+def get_status(task_type: Optional[TaskType] = None) -> Dict[str, Any]:
+    """
+    获取队列状态（便捷函数）
+
+    Args:
+        task_type: 任务类型（可选）
+
+    Returns:
+        Dict: 状态信息
+    """
+    if _global_manager is None:
+        return {"error": "队列管理器未初始化"}
+    return _global_manager.get_status(task_type)

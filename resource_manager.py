@@ -413,7 +413,7 @@ class ResourceManager:
         :param id: 资源ID
         :return: bool - 是否成功加入队列
         """
-        from telegram_queue_manager import QueueManager, Task, TaskType
+        import telegram_queue_manager as qm
 
         resource = db_session.query(CloudResource).filter(
             CloudResource.id == id
@@ -494,14 +494,13 @@ class ResourceManager:
         }
 
         # 创建任务对象
-        task = Task(
-            task_type=TaskType.TELEGRAM_SHARE,
+        task = qm.Task(
+            task_type=qm.TaskType.TELEGRAM_SHARE,
             task_data=task_data
         )
 
-        # 获取队列管理器并添加任务
-        queue_manager = await QueueManager.get_instance()
-        success = await queue_manager.add_task(task)
+        # 使用模块级别函数添加任务
+        success = await qm.add_task(task)
 
         if success:
             print(f"✅ 任务已成功加入队列: {title}")

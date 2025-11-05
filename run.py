@@ -22,8 +22,12 @@ import os
 import sys
 import asyncio
 import threading
+from datetime import datetime
 
+
+from drama_classifier import extract_drama_name, classify_drama
 from task_handlers import register_all_handlers
+from telegram_queue_manager import add_task
 
 # 添加当前目录到系统路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -66,12 +70,14 @@ app.json.sort_keys = False
 app.jinja_env.variable_start_string = "[["
 app.jinja_env.variable_end_string = "]]"
 
+
 # 在每个请求结束后清理数据库 session
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     if exception:
         db_session.rollback()
     db_session.remove()
+
 
 scheduler = BackgroundScheduler()
 logging.basicConfig(
@@ -132,7 +138,7 @@ def login():
         password = data["webui"]["password"]
         # 验证用户名和密码
         if (username == request.form.get("username")) and (
-            password == request.form.get("password")
+                password == request.form.get("password")
         ):
             logging.info(f">>> 用户 {username} 登录成功")
             session["login"] = gen_md5(username + password)
@@ -196,7 +202,7 @@ def run_script_now():
     task_index = request.args.get("task_index", "")
     command = [PYTHON_PATH, "-u", SCRIPT_PATH, CONFIG_PATH, task_index]
     logging.info(
-        f">>> 手动运行任务{int(task_index)+1 if task_index.isdigit() else 'all'}"
+        f">>> 手动运行任务{int(task_index) + 1 if task_index.isdigit() else 'all'}"
     )
 
     def generate_output():
@@ -431,12 +437,11 @@ def get_queue_status():
         return jsonify({"error": "未登录"}), 401
 
     try:
-        from telegram_queue_manager import QueueManager, TaskType
+        import telegram_queue_manager as qm
 
         # 在后台事件循环中获取状态
         async def get_status():
-            queue_manager = await QueueManager.get_instance()
-            return queue_manager.get_status()
+            return qm.get_status()
 
         if queue_loop and queue_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(get_status(), queue_loop)
@@ -447,6 +452,179 @@ def get_queue_status():
 
     except Exception as e:
         logging.error(f"获取队列状态失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 夸克网盘资源页面
+@app.route("/quark_files")
+def quark_files():
+    if not is_login():
+        return redirect(url_for("login"))
+    return render_template("quark_files.html", version=app.config["APP_VERSION"])
+
+
+# 获取夸克网盘文件列表
+@app.route("/api/quark/ls_dir", methods=["GET"])
+def quark_ls_dir():
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        pdir_fid = request.args.get("pdir_fid", "0")
+
+        # 获取cookie
+        cookie = os.environ.get("QUARK_COOKIE", "")
+        if not cookie:
+            data = read_json()
+            cookie = data.get("quark_cookie", "")
+        if not cookie:
+            return jsonify({"error": "未配置夸克Cookie"}), 400
+
+        # 创建 Quark 实例
+        from quark_auto_save import Quark
+        quark = Quark(cookie, index=0)
+
+        if not quark.init():
+            return jsonify({"error": "夸克账号验证失败"}), 400
+
+        # 获取文件列表
+        files = quark.ls_dir(pdir_fid)
+
+        if files is None:
+            return jsonify({"error": "获取文件列表失败"}), 500
+
+        return jsonify({"success": True, "files": files})
+
+    except Exception as e:
+        logging.error(f"获取文件列表失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 分享并保存资源到数据库
+@app.route("/api/quark/share_and_save", methods=["POST"])
+def quark_share_and_save():
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        data = request.json
+        fid = data.get("fid")
+        file_name = data.get("file_name")
+        is_dir = data.get("is_dir", False)
+
+        if not fid or not file_name:
+            return jsonify({"error": "缺少必要参数"}), 400
+
+        item_type = "文件夹" if is_dir else "文件"
+        logging.info(f"开始处理{item_type}: {file_name} (fid: {fid})")
+
+        # 获取cookie
+        cookie = os.environ.get("QUARK_COOKIE", "")
+        if not cookie:
+            config_data = read_json()
+            cookie = config_data.get("quark_cookie", "")
+        if not cookie:
+            return jsonify({"error": "未配置夸克Cookie"}), 400
+
+        # 创建 Quark 实例
+        from quark_auto_save import Quark
+        quark = Quark(cookie, index=0)
+
+        if not quark.init():
+            return jsonify({"error": "夸克账号验证失败"}), 400
+
+        drama_name = extract_drama_name(file_name)
+        existing_resource = db_session.query(CloudResource).filter(
+            CloudResource.drama_name == drama_name,
+            CloudResource.drive_type == "quark"
+        ).first()
+        if existing_resource:
+            return jsonify({"error": f"{item_type}已存在: {file_name}"}), 400
+
+        # 创建分享
+        logging.info(f"正在分享{item_type}: {file_name}")
+        share_result = quark.share_dir([fid], file_name)
+
+        if not share_result or not share_result.get("share_url"):
+            return jsonify({"error": f"创建{item_type}分享失败"}), 500
+
+        share_url = share_result["share_url"]
+        logging.info(f"✅ {item_type}分享成功: {share_url}")
+
+        # 创建新资源
+        # 根据是否为文件夹设置分类
+        category2 = classify_drama(file_name)
+        new_resource = CloudResource(
+            drama_name=drama_name,
+            alias=file_name,
+            drive_type="quark",
+            link=share_url,
+            is_expired=0,
+            category1="影视资源",
+            category2=category2
+        )
+        db_session.add(new_resource)
+        db_session.flush()
+        resource_id = new_resource.id
+        action = "创建"
+        logging.info(f"创建新资源: {file_name} (ID: {resource_id})")
+
+        db_session.commit()
+        success_message = f"{item_type}{action}成功！"
+        logging.info(f"✅ {success_message}")
+
+        # 添加 TMDB 更新任务到队列
+        try:
+            import telegram_queue_manager as qm
+
+            # 准备任务数据
+            task_data = {
+                "resource_id": resource_id,
+                "drama_name": drama_name,
+                "category": category2 if category2 in ["电影", "剧集"] else "电影"
+            }
+
+            # 创建任务
+            task = qm.Task(
+                task_type=qm.TaskType.TMDB_UPDATE,
+                task_data=task_data
+            )
+
+            # 在后台事件循环中添加任务
+            if queue_loop and queue_loop.is_running():
+                async def add_tmdb_task():
+                    return await qm.add_task(task)
+
+                future = asyncio.run_coroutine_threadsafe(add_tmdb_task(), queue_loop)
+                task_added = future.result(timeout=5)
+
+                if task_added:
+                    logging.info(f"✅ 已添加 TMDB 更新任务: {drama_name}")
+                else:
+                    logging.warning(f"⚠️  TMDB 更新任务添加失败: {drama_name}")
+            else:
+                logging.warning("⚠️  队列管理器未运行，跳过 TMDB 更新任务")
+
+        except Exception as e:
+            logging.error(f"添加 TMDB 更新任务失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # 不影响主流程，继续返回成功
+
+        return jsonify({
+            "success": True,
+            "message": success_message,
+            "resource_id": resource_id,
+            "share_url": share_url,
+            "item_type": item_type,
+            "action": action})
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"处理失败: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
