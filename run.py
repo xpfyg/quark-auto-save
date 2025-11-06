@@ -14,7 +14,6 @@ from flask import (
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from flask_apscheduler import APScheduler
 import subprocess
 import hashlib
 import logging
@@ -29,7 +28,7 @@ from datetime import datetime
 from drama_classifier import extract_drama_name, classify_drama
 from task_handlers import register_all_handlers
 from telegram_queue_manager import add_task
-import job  # 导入定时任务模块
+from extensions import scheduler  # 导入共享的 scheduler 实例
 
 # 添加当前目录到系统路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -82,10 +81,7 @@ def shutdown_session(exception=None):
 
 
 # 原有的 BackgroundScheduler，用于 quark_auto_save.py 脚本调度
-scheduler = BackgroundScheduler()
-
-# Flask-APScheduler，用于应用内定时任务
-flask_scheduler = APScheduler()
+bg_scheduler = BackgroundScheduler()
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
@@ -248,25 +244,25 @@ def reload_tasks():
     # 添加新任务
     crontab = data.get("crontab")
     if crontab:
-        if scheduler.state == 1:
-            scheduler.pause()  # 暂停调度器
+        if bg_scheduler.state == 1:
+            bg_scheduler.pause()  # 暂停调度器
         trigger = CronTrigger.from_crontab(crontab)
-        scheduler.remove_all_jobs()
-        scheduler.add_job(
+        bg_scheduler.remove_all_jobs()
+        bg_scheduler.add_job(
             run_python,
             trigger=trigger,
             args=[f"{SCRIPT_PATH} {CONFIG_PATH}"],
             id=SCRIPT_PATH,
         )
-        if scheduler.state == 0:
-            scheduler.start()
-        elif scheduler.state == 2:
-            scheduler.resume()
+        if bg_scheduler.state == 0:
+            bg_scheduler.start()
+        elif bg_scheduler.state == 2:
+            bg_scheduler.resume()
         scheduler_state_map = {0: "停止", 1: "运行", 2: "暂停"}
         logging.info(">>> 重载调度器")
-        logging.info(f"调度状态: {scheduler_state_map[scheduler.state]}")
+        logging.info(f"调度状态: {scheduler_state_map[bg_scheduler.state]}")
         logging.info(f"定时规则: {crontab}")
-        logging.info(f"现有任务: {scheduler.get_jobs()}")
+        logging.info(f"现有任务: {bg_scheduler.get_jobs()}")
         return True
     else:
         logging.info(">>> no crontab")
@@ -769,10 +765,11 @@ def trigger_check_resources_links():
     try:
         # 在后台线程中执行任务，避免阻塞请求
         import threading
+        from job import check_all_resources_links
 
         def run_check():
             try:
-                job.check_all_resources_links()
+                check_all_resources_links()
             except Exception as e:
                 logging.error(f"资源链接检查任务执行失败: {str(e)}")
                 import traceback
@@ -846,13 +843,14 @@ if __name__ == "__main__":
     init()
     reload_tasks()
 
-    # 配置 Flask-APScheduler
+    # 配置并初始化 Flask-APScheduler
     app.config['SCHEDULER_API_ENABLED'] = True  # 启用 API
-    flask_scheduler.init_app(app)
-    flask_scheduler.start()
+    scheduler.init_app(app)
+    scheduler.start()
 
-    # 注册定时任务（从 job.py）
-    job.register_jobs(flask_scheduler)
+    # 导入 job 模块以注册装饰器任务
+    import job
+    logging.info("✅ 定时任务已注册")
 
     # 启动队列管理器后台线程
     start_queue_manager_thread()
@@ -863,5 +861,5 @@ if __name__ == "__main__":
         # 程序退出时停止队列管理器
         stop_queue_manager()
         # 停止 Flask-APScheduler
-        if flask_scheduler.running:
-            flask_scheduler.shutdown()
+        if scheduler.running:
+            scheduler.shutdown()

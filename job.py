@@ -13,8 +13,14 @@ from datetime import datetime
 from db import db_session
 from model.cloud_resource import CloudResource
 from resource_manager import ResourceManager
+from extensions import scheduler
 
 
+# ============================================================================
+# 定时任务 1: 资源链接有效性检查
+# ============================================================================
+
+@scheduler.task('cron', id='check_resources_links', hour=2, minute=0)
 def check_all_resources_links():
     """
     定时任务：检查所有未失效资源的链接有效性
@@ -113,26 +119,33 @@ def check_all_resources_links():
         db_session.remove()
 
 
-def register_jobs(scheduler):
-    """
-    注册所有定时任务
+# ============================================================================
+# 更多定时任务示例（取消注释后启用）
+# ============================================================================
 
-    Args:
-        scheduler: APScheduler 实例
-    """
-    # 添加资源链接检查任务
-    # 每天凌晨 2 点执行
-    scheduler.add_job(
-        id='check_resources_links',
-        func=check_all_resources_links,
-        trigger='cron',
-        hour=2,
-        minute=0,
-        replace_existing=True
-    )
+# 示例 1: 使用 interval 触发器 - 每隔一段时间执行
+# @scheduler.task('interval', id='example_interval_task', hours=6)
+# def example_interval_task():
+#     """每隔 6 小时执行一次"""
+#     logging.info("执行间隔任务...")
 
-    logging.info("✅ 定时任务已注册:")
-    logging.info("  - check_resources_links: 每天 02:00 检查资源链接有效性")
+# 示例 2: 使用 cron 触发器 - 指定时间执行
+# @scheduler.task('cron', id='example_daily_task', hour=8, minute=30)
+# def example_daily_task():
+#     """每天 08:30 执行"""
+#     logging.info("执行每日任务...")
+
+# 示例 3: 每周特定时间执行
+# @scheduler.task('cron', id='example_weekly_task', day_of_week='mon', hour=9, minute=0)
+# def example_weekly_task():
+#     """每周一 09:00 执行"""
+#     logging.info("执行每周任务...")
+
+# 示例 4: 每月特定日期执行
+# @scheduler.task('cron', id='example_monthly_task', day=1, hour=0, minute=0)
+# def example_monthly_task():
+#     """每月 1 号凌晨 00:00 执行"""
+#     logging.info("执行每月任务...")
 
 
 if __name__ == "__main__":

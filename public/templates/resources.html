@@ -135,11 +135,91 @@
       font-weight: bold;
       border-radius: 8px;
     }
+
+    .toast-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 9999;
+    }
+
+    .toast-message {
+      min-width: 300px;
+      margin-bottom: 10px;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .toast-success {
+      background: #28a745;
+      color: white;
+    }
+
+    .toast-error {
+      background: #dc3545;
+      color: white;
+    }
+
+    .toast-info {
+      background: #17a2b8;
+      color: white;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+    }
+
+    .toast-message.hiding {
+      animation: slideOut 0.3s ease-out;
+    }
+
+    .toast-icon {
+      font-size: 24px;
+      margin-right: 12px;
+    }
+
+    .toast-content {
+      flex: 1;
+    }
   </style>
 </head>
 
 <body>
   <div id="app">
+    <!-- Toast 提示容器 -->
+    <div class="toast-container">
+      <div v-for="(toast, index) in toasts" :key="toast.id"
+           :class="['toast-message', `toast-${toast.type}`, { hiding: toast.hiding }]">
+        <i :class="['toast-icon', 'bi', toast.icon]"></i>
+        <div class="toast-content">
+          <strong>{{ toast.title }}</strong>
+          <div v-if="toast.message">{{ toast.message }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- 导航栏 -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
       <div class="container">
@@ -426,6 +506,8 @@
       data: {
         resources: [],
         loading: true,
+        toasts: [],  // Toast 消息列表
+        toastIdCounter: 0,  // Toast ID 计数器
         stats: {
           total: 0,
           active: 0,
@@ -491,6 +573,33 @@
         this.loadStats();
       },
       methods: {
+        // Toast 提示方法
+        showToast(title, message = '', type = 'info', duration = 3000) {
+          const toast = {
+            id: ++this.toastIdCounter,
+            title,
+            message,
+            type,  // success, error, info
+            icon: type === 'success' ? 'bi-check-circle-fill' :
+                  type === 'error' ? 'bi-x-circle-fill' :
+                  'bi-info-circle-fill',
+            hiding: false
+          };
+
+          this.toasts.push(toast);
+
+          // 自动移除
+          setTimeout(() => {
+            toast.hiding = true;
+            setTimeout(() => {
+              const index = this.toasts.indexOf(toast);
+              if (index > -1) {
+                this.toasts.splice(index, 1);
+              }
+            }, 300); // 等待动画完成
+          }, duration);
+        },
+
         async loadResources() {
           this.loading = true;
           try {
@@ -511,7 +620,7 @@
             this.pagination.total = response.data.total;
           } catch (error) {
             console.error('加载资源失败:', error);
-            alert('加载资源失败: ' + (error.response?.data?.error || error.message));
+            this.showToast('加载失败', error.response?.data?.error || error.message, 'error');
           } finally {
             this.loading = false;
           }
@@ -534,18 +643,17 @@
           const resource = this.resources.find(r => r.id === resourceId);
           if (!resource) return;
 
-          if (!confirm(`确定要将《${resource.drama_name}》投稿到 Telegram 吗？`)) {
-            return;
-          }
-
+          // 直接执行，不需要确认
           resource.sharing = true;
+          this.showToast('正在投稿', `《${resource.drama_name}》正在投稿到 Telegram...`, 'info', 2000);
+
           try {
             const response = await axios.post(`/api/share_to_tg/${resourceId}`);
-            alert('投稿成功！');
+            this.showToast('投稿成功', `《${resource.drama_name}》已成功加入投稿队列`, 'success');
             this.loadResources();
           } catch (error) {
             console.error('投稿失败:', error);
-            alert('投稿失败: ' + (error.response?.data?.error || error.message));
+            this.showToast('投稿失败', error.response?.data?.error || error.message, 'error');
           } finally {
             resource.sharing = false;
           }
@@ -589,7 +697,7 @@
         },
         async searchTmdb() {
           if (!this.tmdbSearch.query.trim()) {
-            alert('请输入剧名');
+            this.showToast('提示', '请输入剧名', 'info', 2000);
             return;
           }
 
@@ -604,9 +712,13 @@
             });
             this.tmdbSearch.results = response.data.results || [];
             this.tmdbSearch.searched = true;
+
+            if (this.tmdbSearch.results.length === 0) {
+              this.showToast('未找到结果', '请尝试其他关键词', 'info', 2000);
+            }
           } catch (error) {
             console.error('搜索TMDB失败:', error);
-            alert('搜索失败: ' + (error.response?.data?.error || error.message));
+            this.showToast('搜索失败', error.response?.data?.error || error.message, 'error');
           } finally {
             this.tmdbSearch.searching = false;
           }
@@ -617,7 +729,7 @@
         },
         async confirmTmdbMatch() {
           if (!this.tmdbSearch.selectedResult) {
-            alert('请选择一个TMDB条目');
+            this.showToast('提示', '请选择一个TMDB条目', 'info', 2000);
             return;
           }
 
@@ -635,12 +747,12 @@
               category: this.tmdbSearch.selectedResult.category
             });
 
-            alert('匹配成功！');
+            this.showToast('匹配成功', `TMDB 信息已成功关联`, 'success');
             $('#tmdbModal').modal('hide');
             this.loadResources();
           } catch (error) {
             console.error('匹配失败:', error);
-            alert('匹配失败: ' + (error.response?.data?.error || error.message));
+            this.showToast('匹配失败', error.response?.data?.error || error.message, 'error');
           } finally {
             this.tmdbSearch.matching = false;
           }
