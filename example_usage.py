@@ -27,9 +27,9 @@ def example_1():
         manager = ResourceManager(cookie)
 
         # 处理资源
-        drama_name = "斗罗大陆"
-        share_link = "https://pan.quark.cn/s/xxxxx"
-        savepath = "/动漫/斗罗大陆"
+        drama_name = "默杀"
+        share_link = "https://pan.quark.cn/s/c88ac4958cd2"
+        savepath = "/TXQ"
 
         result = manager.process_resource(drama_name, share_link, savepath)
 
@@ -214,9 +214,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # 如果有命令行参数，直接执行示例4
-    if len(sys.argv) > 1:
-        example_4()
-    else:
-        # 否则显示菜单
-        main()
+    example_1()

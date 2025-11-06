@@ -397,8 +397,8 @@ class ResourceManager:
 
         pwd_id, pdir_fid = self.quark.get_id_from_url(share_link)
         is_sharing, stoken = self.quark.get_stoken(pwd_id)
-        share_file_list = self.quark.get_detail(pwd_id, stoken, pdir_fid)
-        print("share_file_list: ", share_file_list)
+        share_file_list = self.quark.get_detail_v2(pwd_id, stoken, pdir_fid)
+        print("share_file_list====: ", share_file_list)
         if not share_file_list:
             resource.is_expired = 1
             db_session.commit()

@@ -194,9 +194,11 @@ class Quark:
 
     # 可验证资源是否失效
     def get_stoken(self, pwd_id):
-        url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/token"
+        # url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/token"
+        url = "https://drive-h.quark.cn/1/clouddrive/share/sharepage/token"
         querystring = {"pr": "ucpro", "fr": "h5"}
-        payload = {"pwd_id": pwd_id, "passcode": ""}
+        # payload = {"pwd_id": pwd_id, "passcode": ""}
+        payload = {"pwd_id": pwd_id, "passcode": "", "support_visit_limit_private_share": True}
         headers = self.common_headers()
         response = requests.request(
             "POST", url, json=payload, headers=headers, params=querystring
@@ -206,14 +208,17 @@ class Quark:
         else:
             return False, response["message"]
 
+    # 校验资源
     def get_detail(self, pwd_id, stoken, pdir_fid):
         file_list = []
         page = 1
         while True:
-            url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/detail"
+            # url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/detail"
+            url = "https://drive-h.quark.cn/1/clouddrive/share/sharepage/detail"
             querystring = {
                 "pr": "ucpro",
                 "fr": "pc",
+                "uc_param_str": "",
                 "pwd_id": pwd_id,
                 "stoken": stoken,
                 "pdir_fid": pdir_fid,
@@ -225,10 +230,52 @@ class Quark:
                 "_fetch_total": "1",
                 "_sort": "file_type:asc,updated_at:desc",
             }
+            print(querystring)
             headers = self.common_headers()
             response = requests.request(
                 "GET", url, headers=headers, params=querystring
             ).json()
+            if response["data"]["list"]:
+                file_list += response["data"]["list"]
+                page += 1
+            else:
+                break
+            if len(file_list) >= response["metadata"]["_total"]:
+                break
+        return file_list
+
+    # 检测资源，对内使用
+    def get_detail_v2(self, pwd_id, stoken, pdir_fid):
+        file_list = []
+        page = 1
+        while True:
+            url = "https://drive-m.quark.cn/1/clouddrive/share/sharepage/detail"
+            # url = "https://drive-h.quark.cn/1/clouddrive/share/sharepage/detail"
+            querystring = {
+                "pr": "ucpro",
+                "fr": "pc",
+                "uc_param_str": "",
+                "ver": "2",
+                "pwd_id": pwd_id,
+                "stoken": stoken,
+                "pdir_fid": pdir_fid,
+                "force": "0",
+                "_page": page,
+                "_size": "50",
+                "_fetch_banner": "0",
+                "_fetch_share": "0",
+                "_fetch_total": "1",
+                "_sort": "file_type:asc,updated_at:desc",
+            }
+
+            headers = self.common_headers()
+            response = requests.request(
+                "GET", url, headers=headers, params=querystring
+            ).json()
+            print(response)
+            if response["code"] != 0:
+                break
+
             if response["data"]["list"]:
                 file_list += response["data"]["list"]
                 page += 1
@@ -514,7 +561,7 @@ class Quark:
                 fid_list, fid_token_list, to_pdir_fid, pwd_id, stoken
             )
 
-            # print(f"转存文件：{save_file}")
+            print(f"转存文件：{save_file}")
             if save_file["code"] == 41017:
                 return
             elif save_file["code"] == 0:
