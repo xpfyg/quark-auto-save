@@ -343,6 +343,7 @@ class ResourceManager:
         # 4. 保存资源信息到数据库
         if existing_resource:
             # 更新现有资源
+            existing_resource.alias = save_result.get('save_file_names').get(0)
             existing_resource.link = share_link
             existing_resource.caategory2 = tmdb_info.category if tmdb_info else "其他",
             existing_resource.is_expired = 0
@@ -354,6 +355,7 @@ class ResourceManager:
             # 创建新资源
             new_resource = CloudResource(
                 drama_name=drama_name,
+                alias=save_result.get('save_file_names')[0],
                 drive_type=self.drive_type,
                 link=share_link,
                 is_expired=0,

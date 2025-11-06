@@ -571,9 +571,12 @@ class Quark:
                 my_file_list = self.ls_dir(to_pdir_fid)
                 print(f"目录文件列表：{my_file_list}")
                 save_file["save_fids"] = []
+                save_file["save_file_names"] = []
                 for item in my_file_list:
                     if item["file_name"] in file_name_list:
                         save_file["save_fids"].append(item["fid"])
+                        save_file["save_file_names"].append(item["file_name"])
+
                 return save_file
             else:
                 return False

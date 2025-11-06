@@ -238,6 +238,39 @@ class DramaClassifier:
         else:
             return None
 
+    def _update_stats(self, category: str):
+        """
+        更新统计信息
+
+        Args:
+            category: 分类结果（"电影" 或 "剧集"）
+        """
+        self._stats["total"] += 1
+        self._stats["success"] += 1
+
+        if category == "电影":
+            self._stats["movie"] += 1
+        elif category == "剧集":
+            self._stats["drama"] += 1
+
+    def get_stats(self) -> Dict[str, int]:
+        """
+        获取统计信息
+
+        Returns:
+            包含统计数据的字典
+        """
+        return self._stats.copy()
+
+    def reset_stats(self):
+        """重置统计信息"""
+        self._stats = {
+            "total": 0,
+            "success": 0,
+            "failed": 0,
+            "movie": 0,
+            "drama": 0
+        }
 
 
 # 全局单例
