@@ -370,16 +370,8 @@ def share_to_tg(resource_id):
         return jsonify({"error": "未登录"}), 401
 
     try:
-        # 获取第一个cookie
-        cookie = os.environ.get("QUARK_COOKIE", "")
-        if not cookie:
-            data = read_json()
-            cookie = data.get("quark_cookie", "")
-        if not cookie:
-            return jsonify({"error": "未配置夸克Cookie"}), 400
-
-        # 创建资源管理器
-        manager = ResourceManager(cookie)
+        # 创建资源管理器（内部会自动读取cookie）
+        manager = ResourceManager()
 
         # 在后台事件循环中执行异步任务
         if queue_loop and queue_loop.is_running():

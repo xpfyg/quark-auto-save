@@ -15,12 +15,13 @@ from email.header import Header
 from email.utils import formataddr
 
 import requests
+from dotenv import load_dotenv
 
 # 原先的 print 函数和主线程的锁
 _print = print
 mutex = threading.Lock()
 
-
+load_dotenv()
 # 定义新的 print 函数
 def print(text, *args, **kw):
     """
@@ -114,7 +115,6 @@ push_config = {
     'WEBHOOK_CONTENT_TYPE': ''          # 自定义通知 content-type
 }
 # fmt: on
-
 # 首先读取 面板变量 或者 github action 运行变量
 for k in push_config:
     if os.getenv(k):
@@ -924,7 +924,7 @@ def send(title: str, content: str, ignore_default_config: bool = False, **kwargs
 
 
 def main():
-    send("title", "content")
+    send("资源收集", "content")
 
 
 if __name__ == "__main__":

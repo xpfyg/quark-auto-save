@@ -107,23 +107,15 @@ async def handle_resource_sync(task_data: Dict[str, Any]) -> bool:
         share_link = task_data["share_link"]
         savepath = task_data.get("savepath", "/")
 
-        print(f"🔄 开始同步��源: {drama_name}")
+        print(f"🔄 开始同步资源: {drama_name}")
         print(f"🔗 分享链接: {share_link}")
         print(f"📁 保存路径: {savepath}")
 
-        # 这里可以调用 ResourceManager 的 process_resource 方法
-        # 为了演示，这里简化实现
+        # 调用 ResourceManager 的 process_resource 方法
         from resource_manager import ResourceManager
-        from dotenv import load_dotenv
 
-        load_dotenv()
-        cookie = os.environ.get("QUARK_COOKIE", "")
-
-        if not cookie:
-            print("❌ 未配置 QUARK_COOKIE")
-            return False
-
-        manager = ResourceManager(cookie)
+        # 创建资源管理器（内部会自动读取cookie）
+        manager = ResourceManager()
         result = manager.process_resource(drama_name, share_link, savepath)
 
         if result and result["status"] in ["existing", "saved"]:

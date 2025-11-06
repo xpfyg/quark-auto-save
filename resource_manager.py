@@ -237,12 +237,16 @@ class TmdbService:
 class ResourceManager:
     """资源管理器"""
 
-    def __init__(self, cookie, drive_type="quark"):
+    def __init__(self, drive_type="quark"):
         """
         初始化资源管理器
-        :param cookie: 夸克网盘cookie
         :param drive_type: 网盘类型，默认quark
         """
+        # 从配置文件或环境变量读取 cookie
+        cookie = self._get_cookie()
+        if not cookie:
+            raise Exception("❌ 未配置夸克Cookie，请设置环境变量 QUARK_COOKIE 或在配置文件中配置")
+
         self.quark = Quark(cookie, index=0)
         # 不再在初始化时创建 TgClient，而是在需要时动态创建
         # 避免 session 文件锁定问题
@@ -253,6 +257,31 @@ class ResourceManager:
         if not self.quark.init():
             raise Exception("❌ 夸克账号验证失败，请检查cookie")
         print(f"✅ 账号验证成功: {self.quark.nickname}")
+
+    def _get_cookie(self):
+        """
+        从环境变量或配置文件读取 cookie
+        :return: cookie字符串
+        """
+        # 优先从环境变量读取
+        cookie = os.environ.get("QUARK_COOKIE", "")
+        if cookie:
+            return cookie
+
+        # 如果环境变量没有，尝试从配置文件读取
+        try:
+            import json
+            config_path = os.environ.get("CONFIG_PATH", "./quark_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    cookie = data.get("quark_cookie", "")
+                    if cookie:
+                        return cookie
+        except Exception as e:
+            print(f"⚠️ 读取配置文件失败: {str(e)}")
+
+        return ""
 
     # 转存资源到自己账号,并生成自己的分享地址，保存到数据库
     def process_resource(self, drama_name, share_link, savepath="/"):

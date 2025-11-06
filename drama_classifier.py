@@ -6,12 +6,13 @@
 """
 
 import os
+import re
 import time
 import logging
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime
 
-from llm_sdk import create_client
+from llm_sdk import create_client, Message
 
 
 class DramaClassifier:
@@ -217,7 +218,87 @@ class DramaClassifier:
 
         return resource_name
 
+    def get_hot_movies(self, max_count: int = 10, exclude_names: List[str] = None) -> List[str]:
+        """
+        使用豆包AI获取最近热门的流媒体电影资源列表
 
+        Args:
+            max_count: 最多返回电影数量，默认10部
+            exclude_names: 需要排除的电影名称列表，默认None
+
+        Returns:
+            电影名称列表
+        """
+        try:
+            logging.info("🤖 正在使用豆包AI收集热门资源...")
+
+            # 构建排除列表字符串
+            exclude_str = ""
+            if exclude_names:
+                exclude_str = f"\n6. 避免重复，且不要包含以下电影名称：{','.join(exclude_names)}"
+
+            # 构建提示词
+            current_date = datetime.now().strftime("%Y年%m月")
+            prompt = f"""请帮我整理{current_date}最近热门的流媒体电影资源，要求：
+
+1. 优先选择热度较高的资源（例如在豆瓣、IMDb等平台上有较高评分的电影）
+2. 优先选择电影院已下映、流媒体已上映的电影
+3. 优先选择续作的前作资源（例如如果有《XX 2》上映，优先收集《XX 1》）
+4. 只返回电影，不要剧集
+5. 返回{max_count}部电影即可{exclude_str}
+
+请直接返回电影名称列表，每行一个，格式如下：
+1. 电影名称1
+2. 电影名称2
+...
+
+不要有其他说明文字，只返回纯电影名称列表。"""
+
+            # 调用 AI
+            messages = [
+                Message(role="system", content="你是一个影视资源推荐专家，熟悉最新的流媒体平台上映信息。"),
+                Message(role="user", content=prompt)
+            ]
+
+            response = self.client.chat_completion(
+                messages=messages,
+                model=self.model_id,
+                temperature=0.7
+            )
+
+            # 解析结果
+            content = response.content.strip()
+            logging.info(f"AI 返回内容:\n{content}\n")
+
+            # 提取电影名称
+            movies = []
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+
+                # 移除序号（1. 2. 3. 或 1、2、3、）
+                line = re.sub(r'^\d+[.、]\s*', '', line)
+                # 移除其他符号
+                line = line.strip('*-• ')
+
+                if line:
+                    movies.append(line)
+
+            # 限制最多max_count部
+            movies = movies[:max_count]
+
+            logging.info(f"✅ 成功获取 {len(movies)} 部电影:")
+            for i, movie in enumerate(movies, 1):
+                logging.info(f"  {i}. {movie}")
+
+            return movies
+
+        except Exception as e:
+            logging.error(f"❌ AI 收集失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def _parse_result(self, result: str) -> Optional[str]:
         """
