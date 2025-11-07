@@ -1,0 +1,16 @@
+# 核心依赖
+flask==3.0.0
+apscheduler==3.10.4
+requests==2.31.0
+treelib==1.7.0
+
+# 数据库相关（新增）
+sqlalchemy==2.0.44
+pymysql==1.1.2
+flask-sqlalchemy==3.1.1
+
+# Telegram SDK 依赖
+telethon==1.37.0
+
+# 可选依赖
+python-dotenv==1.0.0  # 用于读取.env文件（推荐但非必需）

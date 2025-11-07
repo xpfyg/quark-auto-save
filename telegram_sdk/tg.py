@@ -15,6 +15,7 @@ load_dotenv()
 TG_API_ID = os.environ.get("TG_API_ID", "")
 TG_API_HASH = os.environ.get("TG_API_HASH", "")
 TG_SESSION_NAME = os.environ.get("TG_SESSION_NAME", "quark_bot")  # 默认值
+tg_proxy = os.environ.get("TG_PROXY", False)
 proxy_host = os.environ.get("TG_PROXY_HOST", "127.0.0.1")
 proxy_port = os.environ.get("TG_PROXY_PORT", 7890)
 my_proxy = (socks.SOCKS5, proxy_host, proxy_port)
@@ -103,7 +104,10 @@ class TgClient:
 
             for attempt in range(max_retries):
                 try:
-                    self.client = TelegramClient(self.session_name, self.api_id, self.api_hash, proxy=self.proxy)
+                    if tg_proxy:
+                        self.client = TelegramClient(self.session_name, self.api_id, self.api_hash, proxy=self.proxy)
+                    else:
+                        self.client = TelegramClient(self.session_name, self.api_id, self.api_hash)
                     await self.client.start()
                     self._started = True
                     break

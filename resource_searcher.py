@@ -4,7 +4,7 @@
 资源搜索器
 功能：搜索和评估资源质量
 """
-
+import os
 import re
 import logging
 import requests
@@ -48,7 +48,7 @@ class ResourceSearcher:
                 "cloud_types": cloud_types
             }
 
-            response = requests.get(self.search_api_url, params=params, timeout=30)
+            response = requests.get(self.search_api_url + "/api/search", params=params, timeout=30)
             response.raise_for_status()
 
             data = response.json()
@@ -161,6 +161,7 @@ def get_searcher(search_api_url: str = None) -> ResourceSearcher:
         if search_api_url:
             _searcher_instance = ResourceSearcher(search_api_url)
         else:
-            _searcher_instance = ResourceSearcher()
+
+            _searcher_instance = ResourceSearcher(search_api_url = os.environ.get("SEARCH_API_URL", "http://127.0.0.1:8888/api/search"))
 
     return _searcher_instance

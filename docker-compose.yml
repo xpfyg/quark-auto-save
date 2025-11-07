@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 夸克自动转存服务
+  quark-auto-save:
+    image: ccr.ccs.tencentyun.com/cone387/quark-auto-save:latest
+    container_name: quark-auto-save
+    ports:
+      - "8887:5005"  # WebUI端口
+    environment:
+      # 搜索服务地址（指向 pansou-web 服务）
+      - SEARCH_API_URL=http://pansou-web/
+      # 时区
+      - TZ=Asia/Shanghai
+
+    volumes:
+      # 挂载当前目录到容器（保留本地文件）
+      - ./.env:/app/.env              # 配置文件目录
+      - ./quark_config.json:/app/quark_config.json
+      - ./resource:/app/resource              # 配置文件目录
+      - ./logs:/app/logs                  # 日志目录
+      - ./temp_posters:/app/temp_posters  # 临时海报目录
+      - /etc/localtime:/etc/localtime:ro  # 同步系统时间
+
+    networks:
+      - quark-network
+
+    restart: unless-stopped
+
+    depends_on:
+      - pansou-web
+
+  # 网盘搜索服务
+  pansou-web:
+    image: ghcr.io/fish2018/pansou-web:latest
+    container_name: pansou-web
+    ports:
+      - "8888:80"  # Web服务端口
+
+    networks:
+      - quark-network
+
+    restart: unless-stopped
+
+# 自定义网络，允许服务之间通过服务名相互访问
+networks:
+  quark-network:
+    driver: bridge
+
+# 可选：如果需要持久化数据库，可以添加 volumes
+# volumes:
+#   mysql_data:
