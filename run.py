@@ -29,6 +29,7 @@ from drama_classifier import extract_drama_name, classify_drama
 from task_handlers import register_all_handlers
 from telegram_queue_manager import add_task
 from extensions import scheduler  # 导入共享的 scheduler 实例
+from resource_searcher import get_searcher
 
 # 添加当前目录到系统路径，以便导入模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -165,7 +166,7 @@ def logout():
 def index():
     if not is_login():
         return redirect(url_for("login"))
-    return render_template("index.html", version=app.config["APP_VERSION"])
+    return render_template("index.html", version=app.config["APP_VERSION"], active_page='home')
 
 
 # 获取配置数据
@@ -300,7 +301,15 @@ def init():
 def resources():
     if not is_login():
         return redirect(url_for("login"))
-    return render_template("resources.html", version=app.config["APP_VERSION"])
+    return render_template("resources.html", version=app.config["APP_VERSION"], active_page='resources')
+
+
+# 资源查询页面
+@app.route("/search_resources")
+def search_resources_page():
+    if not is_login():
+        return redirect(url_for("login"))
+    return render_template("search_resources.html", version=app.config["APP_VERSION"], active_page='search')
 
 
 # 获取资源列表
@@ -457,7 +466,7 @@ def get_queue_status():
 def quark_files():
     if not is_login():
         return redirect(url_for("login"))
-    return render_template("quark_files.html", version=app.config["APP_VERSION"])
+    return render_template("quark_files.html", version=app.config["APP_VERSION"], active_page='quark_files')
 
 
 # 获取夸克网盘文件列表
@@ -777,6 +786,97 @@ def trigger_check_resources_links():
 
     except Exception as e:
         logging.error(f"启动资源链接检查任务失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 搜索资源 API
+@app.route("/api/search_resources", methods=["GET"])
+def api_search_resources():
+    """搜索网盘资源"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        keyword = request.args.get("keyword", "").strip()
+        cloud_types_str = request.args.get("cloud_types", "quark")
+
+        if not keyword:
+            return jsonify({"error": "请提供搜索关键词"}), 400
+
+        # 解析网盘类型
+        cloud_types = [ct.strip() for ct in cloud_types_str.split(",") if ct.strip()]
+
+        logging.info(f"🔍 搜索资源: {keyword}, 网盘类型: {cloud_types}")
+
+        # 使用 ResourceSearcher 搜索资源
+        searcher = get_searcher()
+        results = searcher.search_and_sort(keyword, cloud_types)
+
+        logging.info(f"✅ 搜索完成，找到 {len(results)} 条资源")
+
+        return jsonify({
+            "success": True,
+            "keyword": keyword,
+            "cloud_types": cloud_types,
+            "results": results
+        })
+
+    except Exception as e:
+        logging.error(f"搜索资源失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 一键转存资源 API
+@app.route("/api/save_resource", methods=["POST"])
+def api_save_resource():
+    """一键转存资源到夸克网盘"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        data = request.json
+        movie_name = data.get("movie_name", "").strip()
+        link = data.get("link", "").strip()
+        cloud_type = data.get("cloud_type", "quark")
+
+        if not movie_name:
+            return jsonify({"error": "请提供资源名称"}), 400
+
+        if not link:
+            return jsonify({"error": "请提供资源链接"}), 400
+
+        logging.info(f"📥 开始转存资源: {movie_name}")
+        logging.info(f"   链接: {link}")
+        logging.info(f"   网盘类型: {cloud_type}")
+
+        # 创建资源管理器
+        manager = ResourceManager()
+
+        # 调用 process_resource 方法进行转存
+        result = manager.process_resource(
+            movie_name=movie_name,
+            link=link,
+            max_count=1,
+            savepath="/全网自动收集"
+        )
+
+        if result:
+            logging.info(f"✅ 资源转存成功: {movie_name}")
+            return jsonify({
+                "success": True,
+                "message": f"《{movie_name}》转存成功！",
+                "result": result
+            })
+        else:
+            logging.warning(f"⚠️  资源转存失败: {movie_name}")
+            return jsonify({"error": "转存失败，请查看日志了解详情"}), 500
+
+    except Exception as e:
+        logging.error(f"转存资源失败: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

@@ -1,0 +1,31 @@
+{# 通用导航栏组件
+   使用方法: {% include 'navbar_component.html' with context %}
+   需要在页面中定义变量 active_page，值为: 'home', 'resources', 'search', 'quark_files'
+#}
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container">
+    <a class="navbar-brand" href="/"><i class="bi bi-clouds"></i> 夸克自动转存</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ml-auto">
+        <li class="nav-item {% if active_page == 'home' %}active{% endif %}">
+          <a class="nav-link" href="/"><i class="bi bi-house"></i> 首页</a>
+        </li>
+        <li class="nav-item {% if active_page == 'resources' %}active{% endif %}">
+          <a class="nav-link" href="/resources"><i class="bi bi-folder"></i> 资源管理</a>
+        </li>
+        <li class="nav-item {% if active_page == 'search' %}active{% endif %}">
+          <a class="nav-link" href="/search_resources"><i class="bi bi-search"></i> 资源查询</a>
+        </li>
+        <li class="nav-item {% if active_page == 'quark_files' %}active{% endif %}">
+          <a class="nav-link" href="/quark_files"><i class="bi bi-cloud"></i> 网盘资源</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>

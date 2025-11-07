@@ -221,27 +221,7 @@
     </div>
 
     <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-      <div class="container">
-        <a class="navbar-brand" href="/"><i class="bi bi-clouds"></i> 夸克自动转存</a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="navbar-nav ml-auto">
-            <li class="nav-item">
-              <a class="nav-link" href="/"><i class="bi bi-house"></i> 首页</a>
-            </li>
-            <li class="nav-item active">
-              <a class="nav-link" href="/resources"><i class="bi bi-folder"></i> 资源管理</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </nav>
+    {% include 'navbar_component.html' with context %}
 
     <div class="container">
       <div class="d-flex justify-content-between align-items-center mb-4">
