@@ -23,7 +23,7 @@ import notify
 # 定时任务 1: 资源链接有效性检查
 # ============================================================================
 
-@scheduler.task('cron', id='check_resources_links', hour=2, minute=0)
+# @scheduler.task('cron', id='check_resources_links', hour=2, minute=0)
 def check_all_resources_links():
     """
     定时任务：检查所有未失效资源的链接有效性
