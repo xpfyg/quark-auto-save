@@ -139,7 +139,7 @@ def check_all_resources_links():
 #
 
 
-@scheduler.task('cron', id='collect_hot_movies', hour='10,17', minute=0)
+# @scheduler.task('cron', id='collect_hot_movies', hour='10,17', minute=0)
 def collect_hot_movies():
     """
     定时任务：自动收集热门电影资源
