@@ -858,9 +858,8 @@ def api_save_resource():
 
         # 调用 process_resource 方法进行转存
         result = manager.process_resource(
-            movie_name=movie_name,
-            link=link,
-            max_count=1,
+            drama_name=movie_name,
+            share_link=link,
             savepath="/全网自动收集"
         )
 

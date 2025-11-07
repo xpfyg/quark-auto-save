@@ -302,10 +302,9 @@ class ResourceManager:
         existing_resource = db_session.query(CloudResource).filter(
             CloudResource.drama_name == drama_name,
             CloudResource.drive_type == self.drive_type,
-            CloudResource.is_expired == 0
         ).first()
 
-        if existing_resource:
+        if existing_resource and existing_resource.is_expired == 0:
             print(f"✅ 资源已存在且有效: {drama_name}")
             # 获取对应的TMDB信息
             tmdb_info = None

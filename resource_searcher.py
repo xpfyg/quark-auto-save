@@ -17,7 +17,7 @@ class ResourceSearcher:
     用于搜索资源和评估资源质量
     """
 
-    def __init__(self, search_api_url: str = "http://127.0.0.1:8888/api/search"):
+    def __init__(self, search_api_url: str = "http://127.0.0.1:8888"):
         """
         初始化资源搜索器
 
@@ -162,6 +162,6 @@ def get_searcher(search_api_url: str = None) -> ResourceSearcher:
             _searcher_instance = ResourceSearcher(search_api_url)
         else:
 
-            _searcher_instance = ResourceSearcher(search_api_url = os.environ.get("SEARCH_API_URL", "http://127.0.0.1:8888/api/search"))
+            _searcher_instance = ResourceSearcher(search_api_url = os.environ.get("SEARCH_API_URL", "http://127.0.0.1:8888"))
 
     return _searcher_instance

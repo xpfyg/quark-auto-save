@@ -49,6 +49,34 @@
       margin-bottom: 8px;
     }
 
+    .resource-link {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .resource-link a {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-decoration: none;
+      color: #007bff;
+    }
+
+    .resource-link a:hover {
+      text-decoration: underline;
+    }
+
+    .btn-copy {
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+
     .quality-score {
       display: inline-block;
       padding: 4px 12px;
@@ -278,9 +306,14 @@
                   <i class="bi bi-card-text"></i> {{ item.note }}
                 </span>
               </div>
-              <div class="resource-meta mt-2">
-                <i class="bi bi-link-45deg"></i>
-                <a :href="item.link" target="_blank" class="text-primary">{{ item.link }}</a>
+
+              <!-- 资源链接 -->
+              <div class="resource-link">
+                <i class="bi bi-link-45deg text-primary"></i>
+                <a :href="item.url" target="_blank" :title="item.url">{{ item.url }}</a>
+                <button @click="copyLink(item.url)" class="btn btn-sm btn-outline-secondary btn-copy" title="复制链接">
+                  <i class="bi bi-clipboard"></i>
+                </button>
               </div>
             </div>
             <div class="ml-3">
@@ -339,7 +372,10 @@
               <div class="input-group">
                 <input :value="saveForm.link" type="text" class="form-control" readonly>
                 <div class="input-group-append">
-                  <a :href="saveForm.link" target="_blank" class="btn btn-outline-secondary">
+                  <button @click="copyLink(saveForm.link)" class="btn btn-outline-secondary" title="复制链接">
+                    <i class="bi bi-clipboard"></i>
+                  </button>
+                  <a :href="saveForm.link" target="_blank" class="btn btn-outline-primary" title="打开链接">
                     <i class="bi bi-box-arrow-up-right"></i>
                   </a>
                 </div>
@@ -473,13 +509,39 @@
         openSaveModal(item) {
           this.saveForm = {
             movieName: this.searchQuery,  // 默认使用搜索关键词
-            link: item.link,
+            link: item.url,
             cloudType: item.cloud_type,
             qualityScore: item.quality_score,
             saving: false,
             originalItem: item
           };
           $('#saveModal').modal('show');
+        },
+
+        // 复制链接
+        copyLink(link) {
+          // 创建临时文本框
+          const textarea = document.createElement('textarea');
+          textarea.value = link;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+
+          try {
+            // 执行复制
+            const successful = document.execCommand('copy');
+            if (successful) {
+              this.showToast('复制成功', '链接已复制到剪贴板', 'success', 2000);
+            } else {
+              this.showToast('复制失败', '请手动复制链接', 'error', 2000);
+            }
+          } catch (err) {
+            console.error('复制失败:', err);
+            this.showToast('复制失败', '请手动复制链接', 'error', 2000);
+          } finally {
+            document.body.removeChild(textarea);
+          }
         },
 
         // 确认转存
@@ -498,8 +560,7 @@
           try {
             const response = await axios.post('/api/save_resource', {
               movie_name: this.saveForm.movieName,
-              link: this.saveForm.link,
-              cloud_type: this.saveForm.cloudType
+              link: this.saveForm.link
             });
 
             this.showToast('转存成功', response.data.message || '资源已成功转存', 'success');
