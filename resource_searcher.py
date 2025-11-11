@@ -162,6 +162,6 @@ def get_searcher(search_api_url: str = None) -> ResourceSearcher:
             _searcher_instance = ResourceSearcher(search_api_url)
         else:
 
-            _searcher_instance = ResourceSearcher(search_api_url = os.environ.get("SEARCH_API_URL", "http://127.0.0.1:8888"))
+            _searcher_instance = ResourceSearcher(search_api_url = os.environ.get("SEARCH_API_URL", "http://127.0.0.1:8889"))
 
     return _searcher_instance
