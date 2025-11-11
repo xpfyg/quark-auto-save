@@ -630,7 +630,7 @@
           try {
             const response = await axios.post(`/api/share_to_tg/${resourceId}`);
             this.showToast('投稿成功', `《${resource.drama_name}》已成功加入投稿队列`, 'success');
-            this.loadResources();
+            // this.loadResources();
           } catch (error) {
             console.error('投稿失败:', error);
             this.showToast('投稿失败', error.response?.data?.error || error.message, 'error');

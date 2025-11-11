@@ -274,7 +274,7 @@ main() {
     push_image
 
     # 清理构建缓存（可选）
-#    cleanup_images
+    cleanup_images
 
     # 显示镜像信息
     show_image_info

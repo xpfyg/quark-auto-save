@@ -2,6 +2,7 @@
 Telegram 客户端核心类（全局单例模式）
 """
 import asyncio
+import logging
 import os
 import random
 import time
@@ -105,8 +106,10 @@ class TgClient:
             for attempt in range(max_retries):
                 try:
                     if tg_proxy:
+                        logging.info(f"🚀 使用代理连接 Telegram: {self.proxy}")
                         self.client = TelegramClient(self.session_name, self.api_id, self.api_hash, proxy=self.proxy)
                     else:
+                        logging.info("✅ 直接连接 Telegram...")
                         self.client = TelegramClient(self.session_name, self.api_id, self.api_hash)
                     await self.client.start()
                     self._started = True
