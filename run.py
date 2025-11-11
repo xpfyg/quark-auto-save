@@ -342,12 +342,21 @@ def get_resources():
                 (CloudResource.alias.like(f"%{search}%"))
             )
 
-        # 排序
+        # 排序：主排序 + 次要排序（最近分享的靠后）
         sort_column = getattr(CloudResource, sort_by, CloudResource.update_time)
+
+        # 先按照主排序字段排序
         if order == "desc":
             query = query.order_by(sort_column.desc())
         else:
             query = query.order_by(sort_column.asc())
+
+        # 添加次要排序：last_share_time（MySQL兼容写法）
+        # NULL值排前面（未分享的优先），非NULL值按时间升序（越早分享的越靠前）
+        query = query.order_by(
+            CloudResource.last_share_time.is_(None).desc(),  # NULL值优先
+            CloudResource.last_share_time.asc()  # 有分享时间的按升序排列
+        )
 
         # 分页
         total = query.count()
