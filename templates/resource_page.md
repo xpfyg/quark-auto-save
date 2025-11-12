@@ -69,10 +69,10 @@ twitter:image: {{ tmdb.poster_url }}
 
 ### 🔗 下载链接
 
-<div class="download-button">
-
-[**🔗 立即获取《{{ drama_name }}》资源**]({{ share_link }})
-
+<div class="download-section" style="text-align: center; margin: 20px 0;">
+  <a href="{{ share_link }}" class="download-btn" style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); transition: all 0.3s;">
+    🔗 立即获取《{{ drama_name }}》资源
+  </a>
 </div>
 
 > ⚠️ **使用说明**：
