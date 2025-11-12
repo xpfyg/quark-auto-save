@@ -1,6 +1,6 @@
 {# 通用导航栏组件
    使用方法: {% include 'navbar_component.html' with context %}
-   需要在页面中定义变量 active_page，值为: 'home', 'resources', 'search', 'quark_files'
+   需要在页面中定义变量 active_page，值为: 'home', 'resources', 'search', 'quark_files', 'stats'
 #}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container">
@@ -21,6 +21,9 @@
         </li>
         <li class="nav-item {% if active_page == 'quark_files' %}active{% endif %}">
           <a class="nav-link" href="/quark_files"><i class="bi bi-cloud"></i> 网盘资源</a>
+        </li>
+        <li class="nav-item {% if active_page == 'stats' %}active{% endif %}">
+          <a class="nav-link" href="/stats"><i class="bi bi-graph-up"></i> 数据统计</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i> 退出</a>

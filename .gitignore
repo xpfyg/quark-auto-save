@@ -44,3 +44,4 @@ sessions/
 # 资源文件
 resource/*
 quark_config.json
+generate_pages.py

@@ -312,6 +312,14 @@ def search_resources_page():
     return render_template("search_resources.html", version=app.config["APP_VERSION"], active_page='search')
 
 
+# 数据统计页面
+@app.route("/stats")
+def stats_page():
+    if not is_login():
+        return redirect(url_for("login"))
+    return render_template("stats.html", version=app.config["APP_VERSION"], active_page='stats')
+
+
 # 获取资源列表
 @app.route("/api/resources")
 def get_resources():
@@ -885,6 +893,270 @@ def api_save_resource():
 
     except Exception as e:
         logging.error(f"转存资源失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 点击统计API
+@app.route("/api/track_click/<int:resource_id>", methods=["POST"])
+def track_click(resource_id):
+    """记录资源点击统计"""
+    try:
+        # 不需要登录，前端页面公开访问
+        resource = db_session.query(CloudResource).filter(
+            CloudResource.id == resource_id
+        ).first()
+
+        if not resource:
+            return jsonify({"error": "资源不存在"}), 404
+
+        # 增加分享次数（点击次数）
+        resource.share_count = (resource.share_count or 0) + 1
+        # 更新最后分享时间
+        resource.last_share_time = datetime.now()
+
+        db_session.commit()
+
+        logging.info(f"📊 资源点击: {resource.drama_name} (ID: {resource_id})")
+
+        return jsonify({
+            "success": True,
+            "share_count": resource.share_count
+        })
+
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"记录点击失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# 点击跳转API（用于统计后跳转到实际链接）
+@app.route("/link/<int:resource_id>")
+def resource_link_redirect(resource_id):
+    """跳转到资源链接，同时记录点击"""
+    try:
+        resource = db_session.query(CloudResource).filter(
+            CloudResource.id == resource_id
+        ).first()
+
+        if not resource:
+            return "资源不存在", 404
+
+        # 增加分享次数和浏览次数
+        resource.share_count = (resource.share_count or 0) + 1
+        resource.view_count = (resource.view_count or 0) + 1
+        resource.last_share_time = datetime.now()
+
+        db_session.commit()
+
+        logging.info(f"🔗 跳转资源: {resource.drama_name} (ID: {resource_id})")
+
+        # 跳转到实际链接
+        return redirect(resource.link)
+
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"跳转失败: {str(e)}")
+        return f"跳转失败: {str(e)}", 500
+
+
+# 资源浏览统计API
+@app.route("/api/track_view/<int:resource_id>", methods=["POST"])
+def track_view(resource_id):
+    """记录资源页面浏览统计"""
+    try:
+        resource = db_session.query(CloudResource).filter(
+            CloudResource.id == resource_id
+        ).first()
+
+        if not resource:
+            return jsonify({"error": "资源不存在"}), 404
+
+        # 增加浏览次数
+        resource.view_count = (resource.view_count or 0) + 1
+
+        db_session.commit()
+
+        return jsonify({
+            "success": True,
+            "view_count": resource.view_count
+        })
+
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"记录浏览失败: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# 获取热门资源统计
+@app.route("/api/stats/hot_resources")
+def get_hot_resources():
+    """获取热门资源统计"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        limit = request.args.get("limit", 10, type=int)
+        days = request.args.get("days", 7, type=int)
+
+        # 计算时间范围
+        from datetime import timedelta
+        start_time = datetime.now() - timedelta(days=days)
+
+        # 查询热门资源（按点击次数和浏览次数排序）
+        hot_resources = db_session.query(CloudResource, Tmdb).outerjoin(
+            Tmdb, CloudResource.tmdb_id == Tmdb.id
+        ).filter(
+            CloudResource.is_expired == 0
+        ).order_by(
+            (CloudResource.share_count + CloudResource.view_count).desc()
+        ).limit(limit).all()
+
+        result = []
+        for resource, tmdb in hot_resources:
+            item = {
+                "id": resource.id,
+                "drama_name": resource.drama_name,
+                "alias": resource.alias,
+                "category2": resource.category2,
+                "share_count": resource.share_count,
+                "view_count": resource.view_count,
+                "total_count": resource.share_count + resource.view_count,
+                "last_share_time": resource.last_share_time.strftime("%Y-%m-%d %H:%M:%S") if resource.last_share_time else None,
+            }
+            if tmdb:
+                item["tmdb_title"] = tmdb.title
+                item["poster_url"] = tmdb.poster_url
+            result.append(item)
+
+        return jsonify({
+            "success": True,
+            "days": days,
+            "data": result
+        })
+
+    except Exception as e:
+        logging.error(f"获取热门资源失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 获取总览统计数据
+@app.route("/api/stats/overview")
+def get_stats_overview():
+    """获取统计总览数据"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        from sqlalchemy import func
+
+        # 总资源数
+        total_resources = db_session.query(func.count(CloudResource.id)).scalar()
+
+        # 有效资源数
+        valid_resources = db_session.query(func.count(CloudResource.id)).filter(
+            CloudResource.is_expired == 0
+        ).scalar()
+
+        # 总浏览量
+        total_views = db_session.query(func.sum(CloudResource.view_count)).scalar() or 0
+
+        # 总点击量
+        total_clicks = db_session.query(func.sum(CloudResource.share_count)).scalar() or 0
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "total_resources": total_resources,
+                "valid_resources": valid_resources,
+                "total_views": int(total_views),
+                "total_clicks": int(total_clicks)
+            }
+        })
+
+    except Exception as e:
+        logging.error(f"获取统计总览失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 获取分类统计
+@app.route("/api/stats/category")
+def get_stats_category():
+    """获取资源分类统计"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        from sqlalchemy import func
+
+        # 按分类统计资源数量
+        category_stats = db_session.query(
+            CloudResource.category2.label('category'),
+            func.count(CloudResource.id).label('count')
+        ).filter(
+            CloudResource.is_expired == 0
+        ).group_by(
+            CloudResource.category2
+        ).order_by(
+            func.count(CloudResource.id).desc()
+        ).all()
+
+        result = [
+            {"category": stat.category or "未分类", "count": stat.count}
+            for stat in category_stats
+        ]
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+
+    except Exception as e:
+        logging.error(f"获取分类统计失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# 获取网盘类型统计
+@app.route("/api/stats/drive_type")
+def get_stats_drive_type():
+    """获取网盘类型统计"""
+    if not is_login():
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        from sqlalchemy import func
+
+        # 按网盘类型统计资源数量
+        drive_stats = db_session.query(
+            CloudResource.drive_type,
+            func.count(CloudResource.id).label('count')
+        ).filter(
+            CloudResource.is_expired == 0
+        ).group_by(
+            CloudResource.drive_type
+        ).order_by(
+            func.count(CloudResource.id).desc()
+        ).all()
+
+        result = [
+            {"drive_type": stat.drive_type, "count": stat.count}
+            for stat in drive_stats
+        ]
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+
+    except Exception as e:
+        logging.error(f"获取网盘类型统计失败: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

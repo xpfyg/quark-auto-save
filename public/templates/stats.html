@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据统计 - 夸克自动转存</title>
+  <!-- 引入 Bootstrap CSS -->
+  <link rel="stylesheet" href="./static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="./static/css/bootstrap-icons.css">
+  <style>
+    body {
+      padding-bottom: 60px;
+      background-color: #f8f9fa;
+    }
+
+    .stats-card {
+      border-radius: 10px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+      transition: transform 0.2s;
+    }
+
+    .stats-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .stats-number {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #667eea;
+    }
+
+    .stats-label {
+      color: #6c757d;
+      font-size: 0.9rem;
+    }
+
+    .hot-resource-item {
+      padding: 15px;
+      border-bottom: 1px solid #dee2e6;
+      transition: background-color 0.2s;
+    }
+
+    .hot-resource-item:hover {
+      background-color: #f8f9fa;
+    }
+
+    .hot-resource-item:last-child {
+      border-bottom: none;
+    }
+
+    .rank-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      margin-right: 10px;
+    }
+
+    .rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); }
+    .rank-2 { background: linear-gradient(135deg, #C0C0C0, #808080); }
+    .rank-3 { background: linear-gradient(135deg, #CD7F32, #8B4513); }
+    .rank-default { background: linear-gradient(135deg, #667eea, #764ba2); }
+
+    .poster-thumb {
+      width: 80px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 5px;
+      margin-right: 15px;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  [% include 'navbar_component.html' %]
+
+  <div class="container mt-4">
+    <h2 class="mb-4">
+      <i class="bi bi-graph-up"></i> 数据统计
+    </h2>
+
+    <!-- 总览统计卡片 -->
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="card stats-card">
+          <div class="card-body text-center">
+            <div class="stats-number" id="total-resources">-</div>
+            <div class="stats-label">总资源数</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card stats-card">
+          <div class="card-body text-center">
+            <div class="stats-number text-success" id="valid-resources">-</div>
+            <div class="stats-label">有效资源</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card stats-card">
+          <div class="card-body text-center">
+            <div class="stats-number text-info" id="total-views">-</div>
+            <div class="stats-label">总浏览量</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card stats-card">
+          <div class="card-body text-center">
+            <div class="stats-number text-warning" id="total-clicks">-</div>
+            <div class="stats-label">总点击量</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 热门资源排行 -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+              <i class="bi bi-fire"></i> 热门资源排行
+            </h5>
+            <div>
+              <select class="form-select form-select-sm" id="days-filter" style="width: 150px;">
+                <option value="7">最近7天</option>
+                <option value="30" selected>最近30天</option>
+                <option value="90">最近90天</option>
+                <option value="365">最近一年</option>
+              </select>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="hot-resources-list">
+              <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">加载中...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分类统计 -->
+    <div class="row mt-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-pie-chart"></i> 资源分类统计
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="category-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-cloud"></i> 网盘类型统计
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="drive-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 近期趋势 -->
+    <div class="row mt-4">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-graph-up-arrow"></i> 访问趋势（最近7天）
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container" style="height: 250px;">
+              <canvas id="trend-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入必要的JS库 -->
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script>
+    let categoryChart = null;
+    let driveChart = null;
+    let trendChart = null;
+
+    // 加载总览统计
+    async function loadOverviewStats() {
+      try {
+        const response = await fetch('/api/stats/overview');
+        const result = await response.json();
+
+        if (result.success) {
+          const data = result.data;
+          document.getElementById('total-resources').textContent = data.total_resources || 0;
+          document.getElementById('valid-resources').textContent = data.valid_resources || 0;
+          document.getElementById('total-views').textContent = formatNumber(data.total_views || 0);
+          document.getElementById('total-clicks').textContent = formatNumber(data.total_clicks || 0);
+        }
+      } catch (error) {
+        console.error('加载统计数据失败:', error);
+      }
+    }
+
+    // 加载热门资源
+    async function loadHotResources(days = 30) {
+      const container = document.getElementById('hot-resources-list');
+
+      try {
+        const response = await fetch(`/api/stats/hot_resources?limit=20&days=${days}`);
+        const result = await response.json();
+
+        if (result.success && result.data.length > 0) {
+          const html = result.data.map((item, index) => {
+            const rankClass = index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-default';
+            const posterHtml = item.poster_url
+              ? `<img src="${item.poster_url}" class="poster-thumb" alt="${item.drama_name}">`
+              : `<div class="poster-thumb bg-secondary d-flex align-items-center justify-content-center text-white">
+                   <i class="bi bi-film" style="font-size: 2rem;"></i>
+                 </div>`;
+
+            return `
+              <div class="hot-resource-item d-flex align-items-center">
+                <span class="rank-badge ${rankClass}">${index + 1}</span>
+                ${posterHtml}
+                <div class="flex-grow-1">
+                  <h6 class="mb-1">${item.alias || item.drama_name}</h6>
+                  <small class="text-muted">
+                    <i class="bi bi-folder"></i> ${item.category2 || '未分类'}
+                    ${item.tmdb_title ? ` · ${item.tmdb_title}` : ''}
+                  </small>
+                </div>
+                <div class="text-end">
+                  <div class="mb-1">
+                    <i class="bi bi-eye text-info"></i>
+                    <strong>${formatNumber(item.view_count)}</strong> 浏览
+                  </div>
+                  <div>
+                    <i class="bi bi-hand-index text-warning"></i>
+                    <strong>${formatNumber(item.share_count)}</strong> 点击
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          container.innerHTML = html;
+        } else {
+          container.innerHTML = '<div class="text-center py-5 text-muted">暂无数据</div>';
+        }
+      } catch (error) {
+        console.error('加载热门资源失败:', error);
+        container.innerHTML = '<div class="text-center py-5 text-danger">加载失败</div>';
+      }
+    }
+
+    // 加载分类统计
+    async function loadCategoryStats() {
+      try {
+        const response = await fetch('/api/stats/category');
+        const result = await response.json();
+
+        if (result.success && result.data.length > 0) {
+          const ctx = document.getElementById('category-chart').getContext('2d');
+
+          if (categoryChart) categoryChart.destroy();
+
+          categoryChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+              labels: result.data.map(item => item.category || '未分类'),
+              datasets: [{
+                data: result.data.map(item => item.count),
+                backgroundColor: [
+                  '#667eea', '#764ba2', '#f093fb', '#4facfe',
+                  '#43e97b', '#fa709a', '#fee140', '#30cfd0'
+                ]
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'bottom'
+                }
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('加载分类统计失败:', error);
+      }
+    }
+
+    // 加载网盘类型统计
+    async function loadDriveStats() {
+      try {
+        const response = await fetch('/api/stats/drive_type');
+        const result = await response.json();
+
+        if (result.success && result.data.length > 0) {
+          const ctx = document.getElementById('drive-chart').getContext('2d');
+
+          if (driveChart) driveChart.destroy();
+
+          driveChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: result.data.map(item => item.drive_type),
+              datasets: [{
+                label: '资源数量',
+                data: result.data.map(item => item.count),
+                backgroundColor: '#667eea'
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: false
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true
+                }
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('加载网盘统计失败:', error);
+      }
+    }
+
+    // 格式化数字
+    function formatNumber(num) {
+      if (num >= 10000) {
+        return (num / 10000).toFixed(1) + 'w';
+      }
+      return num.toString();
+    }
+
+    // 页面加载时执行
+    document.addEventListener('DOMContentLoaded', function() {
+      loadOverviewStats();
+      loadHotResources(30);
+      loadCategoryStats();
+      loadDriveStats();
+
+      // 天数筛选器事件
+      document.getElementById('days-filter').addEventListener('change', function() {
+        loadHotResources(parseInt(this.value));
+      });
+    });
+  </script>
+</body>
+
+</html>
